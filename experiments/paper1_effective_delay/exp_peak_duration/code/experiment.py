@@ -1,5 +1,5 @@
 """
-Experiment: Regression of Effective Delays
+Experiment: Relating filled delays and peak duration
 """
 
 import os
@@ -53,7 +53,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
 
     if verbose:
         print("=" * 60)
-        print("Experiment: Regression of Effective Delays")
+        print("Experiment: Relating filled delays and peak duration")
         print("=" * 60)
 
     # Configuration

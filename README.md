@@ -1,5 +1,10 @@
 ## Effective Delay
 
+
 #### Requirements
-Load and saving functions for resources item are localized in ```src```
+- Python 3.8+  
+- Common scientific stack: `numpy`, `scipy`, `pandas`, `matplotlib`  
+- Modeling dependencies (update as needed): `torch`, `tqdm`, `pyyaml`  
+- Install with `pip install -r requirements.txt` from the repo root.
+
 #### Structure

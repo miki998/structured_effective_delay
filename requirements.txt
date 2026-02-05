@@ -1,0 +1,11 @@
+tqdm
+numpy
+matplotlib
+seaborn
+networkx
+torch
+scipy
+ipykernel
+jupyter
+ipywidgets
+notebook

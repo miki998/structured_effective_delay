@@ -2,10 +2,8 @@ from typing import Callable, Union
 from collections import Counter
 import numpy as np
 import torch
-from scipy import linalg
 import networkx as nx
 from tqdm.notebook import tqdm
-
 
 def apply_alpha_to_design_torch(
     design_matrix: torch.tensor, alpha: Union[torch.tensor, torch.float]

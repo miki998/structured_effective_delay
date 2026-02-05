@@ -1,12 +1,4 @@
-from typing import Callable, Union
-from scipy import linalg
-from tqdm.notebook import tqdm
-import torch
-import numpy as np
 import matplotlib.pyplot as plt
-
-import time
-import warnings
 
 from src.regmod_torch import *
 
@@ -71,7 +63,6 @@ def combine_paths_matrices_torch(
     design = torch.diag(1 / alpha_norm).type(torch.float64) @ design
     return design
 
-
 def forward(a_design: torch.tensor, effective_delay: torch.tensor) -> torch.tensor:
     """
     Computes the estimated delay based on the design matrix and the effective delay.
@@ -91,93 +82,40 @@ def forward(a_design: torch.tensor, effective_delay: torch.tensor) -> torch.tens
     estimated_delay = a_design @ effective_delay
     return estimated_delay
 
-def effective_delay_solver(
-    x: torch.tensor,
-    y_ground: torch.tensor,
-    a_design: torch.tensor,
-    delta: float = 0,
-    early_stop: float = 1e-5,
-    step_size: float = 1e-3,
-    schedule_step_size: int = 1000,
-    l2_penalty: float = 0.1,
-    n_iter: int = 1000,
-    verbose: bool = False,
-    plot_loss: bool = False,
-    return_logs: bool = False,
-) -> tuple[np.ndarray, float]:
+def mse(y1: torch.tensor, y2: torch.tensor) -> torch.tensor:
     """
-    Performs gradient descent optimization to minimize the mean squared error (MSE)
-    between the predicted output `y_pred` and the ground truth `y_ground`.
+    Computes the mean squared error (MSE) between two tensors.
 
-    Parameters:
-        x (torch.tensor): The input tensor to optimize.
-        y_ground (torch.tensor): The ground truth output tensor.
-        a_design (torch.tensor): The design matrix.
-        delta (float, optional): Value assigned for the synaptic delay parameter.
-        early_stop (float, optional): The early stopping threshold. Defaults to 1e-5.
-        step_size (float, optional): The step size for gradient descent. Defaults to 1e-3.
-        n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
-        verbose (bool, optional): Whether to print progress during optimization. Defaults to False.
+    Parameters
+    ----------
+        y1 (torch.tensor): The first tensor.
+        y2 (torch.tensor): The second tensor.
+    Returns
+    -------
+        torch.tensor: The MSE between the two tensors.
+    """
+    return torch.linalg.norm(y1 - y2)
 
-    Returns:
-        tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final MSE loss.
+def pseudo_inverse(y: np.ndarray, a_design: np.ndarray, rcond: float = 1e-15):
+    """
+    Computes the pseudo-inverse of the input matrix `a_design` and applies it to the
+    input vector `y` to obtain the optimal solution `x_opt`.
+
+    Parameters
+    ----------
+        y (numpy.ndarray): The input vector.
+        a_design (numpy.ndarray): The design matrix.
+        rcond (float, optional): The relative condition number threshold. Defaults to
+        1e-15.
+
+    Returns
+    -------
+        numpy.ndarray: The optimal solution `x_opt`.
     """
 
-    def mse(y_est, y_ground):
-        return torch.linalg.norm(y_est - y_ground)
-
-    df_loss = [-1]
-    loss_logs = [-1]
-    optimizer = torch.optim.ASGD([x], lr=step_size)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=schedule_step_size, gamma=0.5)
-
-    for i in tqdm(range(n_iter), disable=not verbose):
-        y_pred = forward(a_design, x + delta * (x > 0))
-
-        data_fit = mse(y_pred, y_ground)
-        pseudo_fit = torch.linalg.norm(x, ord=2)
-        positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
-
-        loss = data_fit + pseudo_fit * l2_penalty + positivity
-        loss.backward()
-
-        optimizer.step()
-        optimizer.zero_grad()
-        scheduler.step()
-
-        if verbose and not return_logs:
-            if (i % (n_iter // 10)) == 0:
-                print(f"###### ITER {i} #######")
-                print(
-                    f"""datafit loss: {data_fit.item()}
-L2 norm: {pseudo_fit.item()}
-positivity loss: {positivity.item()}"""
-                )
-                print()
-        loss_logs.append(loss.item())
-        df_loss.append(data_fit.item())
-
-        # NOTE: arbitrary value
-        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
-        if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
-            print(f"Stopped at iteration #{i}")
-            break
-
-    if plot_loss:
-        _, ax = plt.subplots()
-
-        ax.plot(df_loss)
-
-        plot_last_n = 100
-        ax.set_xlim(max([-1, i - plot_last_n]), i)
-        ax.set_ylim(
-            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
-        )
-
-    x_opt = x.detach().numpy()
-    if return_logs:
-        return x_opt, data_fit.item(), loss_logs, df_loss
-    return x_opt, data_fit.item()
+    Ainv = np.linalg.pinv(a_design, rcond=rcond)
+    x_opt = Ainv @ y
+    return x_opt
 
 def gradient_descent_solver(
     x: torch.tensor,
@@ -189,14 +127,15 @@ def gradient_descent_solver(
     l2_penalty: float = 0.1,
     n_iter: int = 1000,
     verbose: bool = False,
-    plot_loss: bool = False,
     return_logs: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
+    #TODO: note that not a GD anymore
     Performs gradient descent optimization to minimize the mean squared error (MSE)
     between the predicted output `y_pred` and the ground truth `y_ground`.
 
-    Parameters:
+    Parameters
+    ----------
         x (torch.tensor): The input tensor to optimize.
         y_ground (torch.tensor): The ground truth output tensor.
         a_design (torch.tensor): The design matrix.
@@ -206,56 +145,36 @@ def gradient_descent_solver(
         n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
         verbose (bool, optional): Whether to print progress during optimization. Defaults to False.
 
-    Returns:
+    Returns
+    -------
         tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final MSE loss.
     """
+    nzmask = y_ground > 0 # only optimize for non-zero entries
+    y_ground_masked = y_ground[nzmask]
+    x.requires_grad = True
 
-    def mse(y_est, y_ground):
-        return torch.linalg.norm(y_est - y_ground)
+    optimizer = torch.optim.Adam([x], lr=step_size)
 
     df_loss = [-1]
     loss_logs = [-1]
     for i in tqdm(range(n_iter), disable=not verbose):
-        y_pred = forward(a_design, x + delta * (x > 0))
+        y_pred = forward(a_design[nzmask], x + delta * (x > 0))
 
-        data_fit = mse(y_pred, y_ground)
+        data_fit = mse(y_pred, y_ground_masked)
         pseudo_fit = torch.linalg.norm(x, ord=2)
         positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
-
         loss = data_fit + pseudo_fit * l2_penalty + positivity
         loss.backward()
 
-        x.data = x.data - step_size * x.grad.data
-        x.grad.data.zero_()
+        optimizer.step()
+        optimizer.zero_grad()
 
-        if verbose and not return_logs:
-            if (i % (n_iter // 10)) == 0:
-                print(f"###### ITER {i} #######")
-                print(
-                    f"""datafit loss: {data_fit.item()}
-L2 norm: {pseudo_fit.item()}
-positivity loss: {positivity.item()}"""
-                )
-                print()
         loss_logs.append(loss.item())
         df_loss.append(data_fit.item())
 
-        # NOTE: arbitrary value
-        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
         if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
             print(f"Stopped at iteration #{i}")
             break
-
-    if plot_loss:
-        _, ax = plt.subplots()
-
-        ax.plot(df_loss)
-
-        plot_last_n = 100
-        ax.set_xlim(max([-1, i - plot_last_n]), i)
-        ax.set_ylim(
-            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
-        )
 
     x_opt = x.detach().numpy()
     if return_logs:
@@ -266,7 +185,6 @@ def gradient_descent_solver_alpha(
     x: torch.tensor,
     y_ground: torch.tensor,
     design: torch.tensor,
-    nzmask: torch.tensor,
     alpha: torch.float,
     delta: float = 0,
     early_stop: float = 1e-5,
@@ -274,13 +192,14 @@ def gradient_descent_solver_alpha(
     l2_penalty: float = 0.1,
     n_iter: int = 1000,
     verbose: bool = False,
-    plot_loss: bool = False,
+    return_logs: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
     Performs gradient descent optimization to minimize the mean squared error (MSE)
     between the predicted output `y_pred` and the ground truth `y_ground`.
 
-    Parameters:
+    Parameters
+    ----------
         x (torch.tensor): The input tensor to optimize.
         y_ground (torch.tensor): The ground truth output tensor.
         design (torch.tensor): The design matrix.
@@ -290,62 +209,46 @@ def gradient_descent_solver_alpha(
         n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
         verbose (bool, optional): Whether to print progress during optimization. Defaults to False.
 
-    Returns:
+    Returns
+    -------
         tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final MSE loss.
     """
+    nzmask = y_ground > 0 # only optimize for non-zero entries
+    y_ground_masked = y_ground[nzmask]
+    x.requires_grad = True
+    alpha.requires_grad = True
 
-    def mse(y_est, y_ground):
-        return torch.linalg.norm(y_est - y_ground)
+    optimizer = torch.optim.Adam([x, alpha], lr=step_size)
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter)):
+    for i in tqdm(range(n_iter), disable=not verbose):
         a_design = apply_alpha_to_design_torch(design, alpha)
         a_design = a_design[nzmask]
 
         y_pred = forward(a_design, x + delta * (x > 0))
 
-        data_fit = mse(y_pred, y_ground)
+        data_fit = mse(y_pred, y_ground_masked)
         pseudo_fit = torch.linalg.norm(x, ord=2)
         positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
-
         loss = data_fit + pseudo_fit * l2_penalty + positivity
         loss.backward()
 
-        x.data = x.data - step_size * x.grad.data
-        x.grad.data.zero_()
+        optimizer.step()
+        optimizer.zero_grad()
 
-        if verbose:
-            if (i % (n_iter // 10)) == 0:
-                print(f"###### ITER {i} #######")
-                print(
-                    f"""datafit loss: {data_fit.item()}
-L2 norm: {pseudo_fit.item()}
-positivity loss: {positivity.item()}"""
-                )
-                print()
         loss_logs.append(loss.item())
         df_loss.append(data_fit.item())
 
-        # NOTE: arbitrary value
-        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
         if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
             print(f"Stopped at iteration #{i}")
             break
 
-    if plot_loss:
-        _, ax = plt.subplots()
-
-        ax.plot(df_loss)
-
-        plot_last_n = 100
-        ax.set_xlim(max([-1, i - plot_last_n]), i)
-        ax.set_ylim(
-            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
-        )
-
     x_opt = x.detach().numpy()
     a_opt = alpha.detach().item()
+
+    if return_logs:
+        return x_opt, a_opt, data_fit.item(), loss_logs, df_loss
 
     return x_opt, a_opt, data_fit.item()
 
@@ -359,13 +262,14 @@ def gradient_descent_solver_delta(
     l2_penalty: float = 0.1,
     n_iter: int = 1000,
     verbose: bool = False,
-    plot_loss: bool = False,
+    return_logs: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
     Performs gradient descent optimization to minimize the mean squared error (MSE)
     between the predicted output `y_pred` and the ground truth `y_ground`.
 
-    Parameters:
+    Parameters
+    ----------
         x (torch.tensor): The input tensor to optimize.
         y_ground (torch.tensor): The ground truth output tensor.
         a_design (torch.tensor): The design matrix (+ with autograd)
@@ -375,66 +279,51 @@ def gradient_descent_solver_delta(
         n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
         verbose (bool, optional): Whether to print progress during optimization. Defaults to False.
 
-    Returns:
+    Returns
+    -------
         tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final MSE loss.
     """
-
-    def mse(y_est, y_ground):
-        return torch.linalg.norm(y_est - y_ground)
+    nzmask = y_ground > 0 # only optimize for non-zero entries
+    y_ground_masked = y_ground[nzmask]
+    x.requires_grad = True
+    delta.requires_grad = True
+    
+    optimizer = torch.optim.Adam([x, delta], lr=step_size)
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter)):
-        y_pred = forward(a_design, x + delta * (x > 0))
+    for i in tqdm(range(n_iter), disable=not verbose):
+        y_pred = forward(a_design[nzmask], x + delta * (x > 0))
 
-        data_fit = mse(y_pred, y_ground)
+        data_fit = mse(y_pred, y_ground_masked)
         pseudo_fit = torch.linalg.norm(x, ord=2)
         positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
+        delta_positivity = 10 * torch.abs(delta * (delta < 0).type(torch.float))
 
-        loss = data_fit + pseudo_fit * l2_penalty + positivity
+        loss = data_fit + pseudo_fit * l2_penalty + positivity + delta_positivity
         loss.backward()
 
-        x.data = x.data - step_size * x.grad.data
-        x.grad.data.zero_()
+        optimizer.step()
+        optimizer.zero_grad()
 
-        if verbose:
-            if (i % (n_iter // 10)) == 0:
-                print(f"###### ITER {i} #######")
-                print(
-                    f"""datafit loss: {data_fit.item()}
-L2 norm: {pseudo_fit.item()}
-positivity loss: {positivity.item()}"""
-                )
-                print()
         loss_logs.append(loss.item())
         df_loss.append(data_fit.item())
 
-        # NOTE: arbitrary value
-        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
         if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
             print(f"Stopped at iteration #{i}")
             break
 
-    if plot_loss:
-        _, ax = plt.subplots()
-
-        ax.plot(df_loss)
-
-        plot_last_n = 100
-        ax.set_xlim(max([-1, i - plot_last_n]), i)
-        ax.set_ylim(
-            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
-        )
-
     x_opt = x.detach().numpy()
     delta_opt = delta.detach().item()
+    if return_logs:
+        return x_opt, delta_opt, data_fit.item(), loss_logs, df_loss
+
     return x_opt, delta_opt, data_fit.item()
 
-def effect_delay_solver(
+def effective_delay_solver(
     x: torch.tensor,
     y_ground: torch.tensor,
     design: torch.tensor,
-    nzmask: torch.tensor,
     alpha: torch.float,
     delta: float = 0,
     early_stop: float = 1e-5,
@@ -442,13 +331,15 @@ def effect_delay_solver(
     l2_penalty: float = 0.1,
     n_iter: int = 1000,
     verbose: bool = False,
-    plot_loss: bool = False,
+    return_logs: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
     Performs gradient descent optimization to minimize the mean squared error (MSE)
     between the predicted output `y_pred` and the ground truth `y_ground`.
+    Jointly optimizes for alpha and delta.
 
-    Parameters:
+    Parameters
+    ----------
         x (torch.tensor): The input tensor to optimize.
         y_ground (torch.tensor): The ground truth output tensor.
         a_design (torch.tensor): The design matrix (+ with autograd)
@@ -458,157 +349,46 @@ def effect_delay_solver(
         n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
         verbose (bool, optional): Whether to print progress during optimization. Defaults to False.
 
-    Returns:
+    Returns
+    -------
         tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final MSE loss.
     """
+    nzmask = y_ground > 0 # only optimize for non-zero entries
+    y_ground_masked = y_ground[nzmask]
+    x.requires_grad = True
+    alpha.requires_grad = True
+    delta.requires_grad = True
 
-    def mse(y_est, y_ground):
-        return torch.linalg.norm(y_est - y_ground)
+    optimizer = torch.optim.Adam([x, alpha, delta], lr=step_size)
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter)):
+    for i in tqdm(range(n_iter), disable=not verbose):
         a_design = apply_alpha_to_design_torch(design, alpha)
         a_design = a_design[nzmask]
 
         y_pred = forward(a_design, x + delta * (x > 0))
-
-        data_fit = mse(y_pred, y_ground)
+        data_fit = mse(y_pred, y_ground_masked)
         pseudo_fit = torch.linalg.norm(x, ord=2)
         positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
 
         loss = data_fit + pseudo_fit * l2_penalty + positivity
         loss.backward()
 
-        x.data = x.data - step_size * x.grad.data
-        x.grad.data.zero_()
+        optimizer.step()
+        optimizer.zero_grad()
 
-        if verbose:
-            if (i % (n_iter // 10)) == 0:
-                print(f"###### ITER {i} #######")
-                print(
-                    f"""datafit loss: {data_fit.item()}
-L2 norm: {pseudo_fit.item()}
-positivity loss: {positivity.item()}"""
-                )
-                print()
         loss_logs.append(loss.item())
         df_loss.append(data_fit.item())
 
-        # NOTE: arbitrary value
-        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
         if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
             print(f"Stopped at iteration #{i}")
             break
 
-    if plot_loss:
-        _, ax = plt.subplots()
-
-        ax.plot(df_loss)
-
-        plot_last_n = 100
-        ax.set_xlim(max([-1, i - plot_last_n]), i)
-        ax.set_ylim(
-            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
-        )
-
     x_opt = x.detach().numpy()
     alpha_opt = alpha.detach().item()
     delta_opt = delta.detach().item()
+    if return_logs:
+        return x_opt, (alpha_opt, delta_opt), data_fit.item(), loss_logs, df_loss
     
     return x_opt, (alpha_opt, delta_opt), data_fit.item()
-
-def naive_gradient_descent(
-    x: torch.tensor,
-    y_ground: torch.tensor,
-    alpha: torch.tensor,
-    multi_design: torch.tensor,
-    early_stop: float = 1e-5,
-    step_size: float = 1e-3,
-    n_iter: int = 1000,
-    verbose: bool = False,
-) -> tuple[np.ndarray, float]:
-    """
-    Performs naive gradient descent optimization on a given input tensor `x` to
-    minimize the mean squared error (MSE) between the predicted output `y_pred` and the
-    ground truth `y_ground`.
-
-    Parameters:
-        x (torch.tensor): The input tensor to be optimized.
-        y_ground (torch.tensor): The ground truth output tensor.
-        alpha (torch.tensor): The alpha parameter used to combine the path matrices.
-        multi_design (torch.tensor): The multi-design matrix.
-        early_stop (float, optional): The early stopping criterion based on the change
-        in the last 5 loss values. Defaults to 1e-5.
-        step_size (float, optional): The step size for the gradient descent update.
-        Defaults to 1e-3.
-        n_iter (int, optional): The maximum number of iterations for the gradient
-        descent. Defaults to 1000.
-        verbose (bool, optional): Whether to print the loss at every 10% of the
-        iterations. Defaults to False.
-
-    Returns:
-        tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final loss
-        value.
-    """
-
-    warnings.warn(
-        "Not using the newest path designing function", DeprecationWarning, stacklevel=2
-    )
-
-    def mse(y_est, y_ground):
-        return torch.linalg.norm(y_est - y_ground)
-
-    loss_logs = [-1]
-    for i in range(n_iter):
-        a_design = combine_paths_matrices_torch(multi_design, alpha=alpha)
-        y_pred = forward(a_design, x)
-
-        data_fit = mse(y_pred, y_ground)
-        pseudo_fit = torch.linalg.norm(x, ord=2)
-        positivity = torch.sum(x * (x < 0).type(torch.float))
-
-        loss = data_fit + pseudo_fit + positivity
-        loss.backward()
-
-        x.data = x.data - step_size * x.grad.data
-        x.grad.data.zero_()
-
-        if verbose:
-            if (i % (n_iter // 10)) == 0:
-                print(f"###### ITER {i} #######")
-                print(
-                    f"""datafit loss: {data_fit.item()}
-L2 norm: {pseudo_fit.item()}
-positivity loss: {positivity.item()}"""
-                )
-                print()
-        loss_logs.append(loss.item())
-
-        # NOTE: arbitrary value
-        if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
-            print(f"Stopped at iteration #{i}")
-            break
-
-    x_opt = x.detach().numpy()
-    return x_opt, data_fit.item()
-
-
-def pseudo_inverse(y: np.ndarray, a_design: np.ndarray, rcond: float = 1e-15):
-    """
-    Computes the pseudo-inverse of the input matrix `a_design` and applies it to the
-    input vector `y` to obtain the optimal solution `x_opt`.
-
-    Parameters:
-        y (numpy.ndarray): The input vector.
-        a_design (numpy.ndarray): The design matrix.
-        rcond (float, optional): The relative condition number threshold. Defaults to
-        1e-15.
-
-    Returns:
-        numpy.ndarray: The optimal solution `x_opt`.
-    """
-
-    Ainv = np.linalg.pinv(a_design, rcond=rcond)
-    x_opt = Ainv @ y
-    return x_opt

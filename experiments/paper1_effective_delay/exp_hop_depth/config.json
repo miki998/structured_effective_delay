@@ -1,0 +1,13 @@
+{
+    "scale": "1",
+    "age_range": "0_15",
+    "delay": "400",
+    "feature": "feature_peak_delay_zth5",
+    "bundle_prob_thresh": 0.9,
+    "optimization_parameters": {
+            "n_iter": 1000,
+            "step_size": 0.05,
+            "early_stop": 1e-10,
+            "l2_penalty": 0.1
+        }
+}

@@ -371,7 +371,6 @@ def build_design_shortest(
     """
 
     design_matrix = get_shortest_matrices(adjacency=adjacency, n_subopt=n_subopt)
-
     out_design = apply_alpha_to_design(design_matrix, n_subopt=n_subopt, alpha=alpha)
 
     return out_design

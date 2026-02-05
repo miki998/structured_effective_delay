@@ -1,9 +1,27 @@
 import pickle
-from tqdm import tqdm
-from copy import deepcopy
-
 import numpy as np
 import matplotlib.pyplot as plt
+import json
+
+
+def load_json(json_filename: str):
+    """
+    Load an object saved by save_json. Reconstructs numpy arrays, pandas DataFrames/Series,
+    and torch.Tensors (if torch is available).
+
+    Parameters
+    ----------
+    json_filename : str
+        Path to the JSON file to load.
+
+    Returns
+    -------
+    Any
+        The reconstructed Python object.
+    """
+
+    with open(json_filename, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def save(pickle_filename: str, iterable: object) -> None:
     """

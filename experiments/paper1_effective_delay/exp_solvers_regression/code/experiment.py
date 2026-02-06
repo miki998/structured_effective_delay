@@ -82,7 +82,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         for i, fig in enumerate(figs2):
             if fig is not None:
                 fig.savefig(
-                    os.path.join(RESULTS_DIR, f"bundle_probability_atlas_{i}.png"),
+                    os.path.join(RESULTS_DIR, f"real_delays_{i}.png"),
                     dpi=300,
                     bbox_inches="tight",
                 )

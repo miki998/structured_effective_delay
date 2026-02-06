@@ -3,6 +3,5 @@
         "age_range": "0_15",
         "delay": "400",
         "feature": "feature_peak_delay_zth5",
-        "bundle_prob_thresh": 0.9,
-        "max_path_depth": 1
+        "bundle_prob_thresh": 0.9
 }

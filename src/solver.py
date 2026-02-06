@@ -1,6 +1,7 @@
-import matplotlib.pyplot as plt
+import sys
 
 from src.regmod_torch import *
+import time
 
 def combine_paths_matrices_torch(
     matrices: torch.tensor, alpha: Union[float, torch.tensor] = 0
@@ -157,7 +158,7 @@ def gradient_descent_solver(
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter), disable=not verbose):
+    for _ in tqdm(range(n_iter), total=n_iter, desc="Descent Optimizing...",    file=sys.stdout):
         y_pred = forward(a_design[nzmask], x + delta * (x > 0))
 
         data_fit = mse(y_pred, y_ground_masked)
@@ -173,7 +174,6 @@ def gradient_descent_solver(
         df_loss.append(data_fit.item())
 
         if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
-            print(f"Stopped at iteration #{i}")
             break
 
     x_opt = x.detach().numpy()
@@ -222,9 +222,19 @@ def gradient_descent_solver_alpha(
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter), disable=not verbose):
-        a_design = apply_alpha_to_design_torch(design, alpha)
-        a_design = a_design[nzmask]
+    for i in tqdm(range(n_iter), disable=not verbose, desc="Descent(Alpha) Optimizing..."):
+        # start = time.time()
+        a_design = apply_alpha_to_design_torch_accelerate(design, alpha)
+        # print(f"Time for design matrix computation accelerated: {time.time() - start:.4f} seconds")
+        # start = time.time()
+        # a_design2 = apply_alpha_to_design_torch(design, alpha)
+        # print(f"Time for design matrix computation original: {time.time() - start:.4f} seconds")
+
+        # print((a_design.type(torch.float) - a_design2.type(torch.float)).min())
+        # assert torch.allclose(a_design.type(torch.float), a_design2.type(torch.float), atol=1e-6), "Mismatch between accelerated and original implementation"
+
+        a_design = a_design[nzmask].type(torch.float)
+        
 
         y_pred = forward(a_design, x + delta * (x > 0))
 
@@ -233,6 +243,21 @@ def gradient_descent_solver_alpha(
         positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
         loss = data_fit + pseudo_fit * l2_penalty + positivity
         loss.backward()
+
+        # print(np.isnan(a_design.detach().numpy()).any())
+        # print(np.isnan((x + delta * (x > 0)).detach().numpy()).any())
+
+        # print("\n######")
+        # print("pred", y_pred.detach().numpy())
+        # print("loss", loss.detach().item(), "alpha", alpha.detach().item())
+        # print("alpha.grad", alpha.grad.detach())
+        # print("x.grad", np.isnan(x.grad.detach().numpy()).any())
+        # print("alpha", alpha.detach())
+
+        if alpha.grad is not None:
+            alpha.grad.nan_to_num_(nan=0.0)
+        if x.grad is not None:
+            x.grad.nan_to_num_(nan=0.0)
 
         optimizer.step()
         optimizer.zero_grad()
@@ -292,7 +317,7 @@ def gradient_descent_solver_delta(
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter), disable=not verbose):
+    for i in tqdm(range(n_iter), disable=not verbose, desc="Descent(Delta) Optimizing..."):
         y_pred = forward(a_design[nzmask], x + delta * (x > 0))
 
         data_fit = mse(y_pred, y_ground_masked)
@@ -363,9 +388,9 @@ def effective_delay_solver(
 
     df_loss = [-1]
     loss_logs = [-1]
-    for i in tqdm(range(n_iter), disable=not verbose):
-        a_design = apply_alpha_to_design_torch(design, alpha)
-        a_design = a_design[nzmask]
+    for i in tqdm(range(n_iter), disable=not verbose, desc="Descent(Joint) Optimizing..."):
+        a_design = apply_alpha_to_design_torch_accelerate(design, alpha)
+        a_design = a_design[nzmask].type(torch.float)
 
         y_pred = forward(a_design, x + delta * (x > 0))
         data_fit = mse(y_pred, y_ground_masked)
@@ -374,6 +399,13 @@ def effective_delay_solver(
 
         loss = data_fit + pseudo_fit * l2_penalty + positivity
         loss.backward()
+
+        if alpha.grad is not None:
+            alpha.grad.nan_to_num_(nan=0.0)
+        if delta.grad is not None:
+            delta.grad.nan_to_num_(nan=0.0)
+        if x.grad is not None:
+            x.grad.nan_to_num_(nan=0.0)
 
         optimizer.step()
         optimizer.zero_grad()

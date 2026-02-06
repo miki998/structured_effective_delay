@@ -158,10 +158,15 @@ class Experiments:
         true_a, true_delta = 0.5, 0
         guess_a, guess_delta = 0.0, 1.0
 
+        if op.exists(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl")):
+            design_matrices = load(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl"))
+        else:
+            design_matrices = regmod.get_shortest_matrices(adjacency=adj, n_subopt=self.config['max_path_depth'])
+            save(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl"), design_matrices)
+        
         if op.exists(op.join(DATA_DIR, f"compare_syn_ftract_exp_{true_a}_{true_delta}_{self.config['scale']}.pkl")):
             compare_solvers = load(op.join(DATA_DIR, f"compare_syn_ftract_exp_{true_a}_{true_delta}_{self.config['scale']}.pkl"))
         else:
-            design_matrices = regmod.get_shortest_matrices(adjacency=adj, n_subopt=self.config['max_path_depth'])
             design_model = solver.torch.tensor(regmod.apply_alpha_to_design(design_matrices, n_subopt=self.config['max_path_depth'], alpha=true_a))
 
             guess_design_model = solver.torch.tensor(regmod.apply_alpha_to_design(design_matrices, n_subopt=self.config['max_path_depth'], alpha=guess_a))
@@ -172,7 +177,7 @@ class Experiments:
             x_init = np.random.rand(len(x_ground))
             
             x = solver.torch.tensor(x_init).requires_grad_(True)
-            x_opt_gd, loss_gd = solver.gradient_descent_solver(x, y_ground, guess_design_model, delta=true_delta,
+            x_opt_gd, loss_gd = solver.gradient_descent_solver(x, y_ground, guess_design_model, delta=guess_delta,
                                                 n_iter=self.n_iter, verbose=self.verbose, 
                                                 early_stop=self.early_stop, step_size=self.step_size,
                                                 l2_penalty=self.l2_penalty)
@@ -292,10 +297,15 @@ class Experiments:
 
         guess_a, guess_delta = 0.5, 0.0
 
+        if op.exists(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl")):
+            design_matrices = load(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl"))
+        else:
+            design_matrices = regmod.get_shortest_matrices(adjacency=adj, n_subopt=self.config['max_path_depth'])
+            save(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl"), design_matrices)
+
         if os.path.exists(op.join(DATA_DIR, f"compare_ftract_delay_regress_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
             compare_solvers = load(op.join(DATA_DIR, f"compare_ftract_delay_regress_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
         else:
-            design_matrices = regmod.get_shortest_matrices(adj, self.config['max_path_depth'], progress=True)
             design_model = solver.torch.tensor(regmod.apply_alpha_to_design(design_matrix=design_matrices, n_subopt=self.config['max_path_depth'], alpha=guess_a))
 
             np.random.seed(99)
@@ -326,7 +336,7 @@ class Experiments:
 
             save(op.join(DATA_DIR, f"compare_ftract_delay_regress_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), compare_solvers)
 
-        fig1, axes = plt.subplots(ncols=5, figsize=(10, 5))
+        fig1, axes = plt.subplots(ncols=5, figsize=(13, 6))
 
         axes[0].imshow(y_ground_mat, cmap='gray')
         axes[0].set_title(f"Conduction delays $y$", fontsize=12)
@@ -339,7 +349,7 @@ class Experiments:
             loss = compare_solvers[key][-1]
             x_pred_mat = add_diagonal_entries(x_opt.reshape(adj.shape[0], adj.shape[1]-1))
             axes[i+1].imshow(x_pred_mat, cmap='gray')#, vmax=y_pred_mat.max())
-            axes[i+1].set_title(f"Method: {key}, loss={np.round(loss,4)}")
+            axes[i+1].set_title(f"Method: {key},\n loss={np.round(loss,4)}")
             add_cbar(fig1, axes[i+1])
 
         fig1.tight_layout()

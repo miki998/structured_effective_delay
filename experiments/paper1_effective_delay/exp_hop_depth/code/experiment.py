@@ -49,7 +49,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         # Suppress Python warnings
         warnings.filterwarnings("ignore")
         # Quiet common noisy libraries
-        for logger_name in ("matplotlib", "networkx", "numba", "flowgsp", "urllib3"):
+        for logger_name in ("matplotlib", "networkx", "numba", "urllib3"):
             logging.getLogger(logger_name).setLevel(logging.ERROR)
 
     if verbose:
@@ -116,8 +116,8 @@ class Experiments:
         self.gmregions_names = hf.get('header').get('gmregions')[()]
 
         consistency_view = self.get_aggprop(hf, 'consistency')
-        n = consistency_view.shape[0]
-        adj = consistency_view[:n-1, :n-1]
+        self.n = consistency_view.shape[0]
+        adj = consistency_view[:self.n-1, :self.n-1]
         adj -= np.diag(np.diag(adj))
 
         self.adj = (adj > self.config['bundle_prob_thresh']).astype(int)
@@ -158,6 +158,12 @@ class Experiments:
         return ret
     
     def run_experiment1(self):
+        prob_thresh = 0.0
+        dict_key = f"scale{self.scale}__{self.age_range}__{self.delay_max}__{self.feature}"
+        self.y_ground = self.ftracts[dict_key]
+        self.y_ground = self.y_ground[:self.n-1, :self.n-1]
+        self.y_ground *= (self.y_ground > prob_thresh)
+        self.y_ground = solver.torch.tensor(remove_diagonal_entries(self.y_ground).flatten())
         # Regression for different max path depths
         if os.path.exists(op.join(DATA_DIR, f"effective_delays_maxdepth_sets.pkl")):
             x_opts, losses = load(op.join(DATA_DIR, f"effective_delays_maxdepth_sets.pkl"))
@@ -182,7 +188,7 @@ class Experiments:
             save(op.join(DATA_DIR, f"effective_delays_maxdepth_sets.pkl"), (x_opts, losses))
 
         y = self.y_ground
-
+        
         x_opt1, x_opt2 = x_opts
         x_mask1 = x_opt1 > 1
         x_mask2 = x_opt2 > 1

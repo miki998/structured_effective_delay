@@ -63,7 +63,7 @@ def list_papers_and_experiments() -> None:
         return
 
     print("\n" + "=" * 60)
-    print("FlowGSP Experiments")
+    print("Effective Delay Experiments")
     print("=" * 60)
 
     # Paper numbering based on readme order
@@ -111,8 +111,6 @@ def list_papers_and_experiments() -> None:
             )
 
     print("\n" + "=" * 60)
-    print("For more details, see experiments/PAPERS_AND_EXPERIMENTS.md")
-    print("=" * 60 + "\n")
 
 
 def run_experiment(paper: str, experiment: str, verbose: bool = True) -> int:
@@ -181,7 +179,7 @@ def run_experiment(paper: str, experiment: str, verbose: bool = True) -> int:
 def main() -> int:
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
-        description="FlowGSP Experiments CLI - Run reproducible experiments",
+        description="Effective Delay Experiments CLI - Run reproducible experiments",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

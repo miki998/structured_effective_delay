@@ -47,7 +47,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         # Suppress Python warnings
         warnings.filterwarnings("ignore")
         # Quiet common noisy libraries
-        for logger_name in ("matplotlib", "networkx", "numba", "flowgsp", "urllib3"):
+        for logger_name in ("matplotlib", "networkx", "numba", "urllib3"):
             logging.getLogger(logger_name).setLevel(logging.ERROR)
 
     if verbose:

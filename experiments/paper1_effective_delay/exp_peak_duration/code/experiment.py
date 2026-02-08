@@ -73,7 +73,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     if save_results:
         os.makedirs(RESULTS_DIR, exist_ok=True)
         fig1.savefig(
-            os.path.join(RESULTS_DIR, ".png"),
+            os.path.join(RESULTS_DIR, "filled_delays_and_peak_duration.png"),
             dpi=300,
             bbox_inches="tight",
         )
@@ -178,7 +178,7 @@ class Experiments:
         peak_durations = peak_durations[:self.n-1, :self.n-1]
         peak_durations *= (conduction > prob_thresh)
 
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(9, 6))
 
         ax.set_title(f"Peak Duration vs Regression Effect \n(scale {self.scale}, age {self.age_range}, delay {self.delay_max}ms)", fontsize=14)
 

@@ -17,7 +17,7 @@ import h5py
 from src import regmod
 from src import solver
 
-from src.utils import load_json, load, save, annotate_heatmap, add_cbar, remove_diagonal_entries, add_diagonal_entries
+from src.utils import load_json, load, save, remove_diagonal_entries
 
 # Get the directory of this script for relative paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -224,7 +224,7 @@ class Experiments:
 
         y_est_opt = solver.forward(design_model_masked.float(), solver.torch.tensor(x_opt).float() + delta * (solver.torch.tensor(x_opt).float() > 0)).numpy()
 
-        fig, ax = plt.subplots(1, 4, figsize=(14,3))
+        fig, ax = plt.subplots(1, 3, figsize=(11, 3))
 
         ax[0].scatter(x_ground[~non_zero_mask], x_opt[~non_zero_mask], edgecolor='k', alpha=0.7, color='red', label='w/o Conduction Delay')
         ax[0].scatter(x_ground[non_zero_mask], x_opt[non_zero_mask], edgecolor='k', alpha=0.7, color='blue', label='w/ Conduction Delay')
@@ -250,15 +250,15 @@ class Experiments:
 
         ax[1].set_ylabel('Relative error')
 
-        ax[2].plot(df_loss, label='Data Fit Loss', color='blue', marker='o', markersize=3, markevery=10)
-        ax[2].plot(loss_logs, label='Total Loss', color='orange', marker='o', markersize=3, markevery=10)
-        ax[2].set_xlabel('Iteration')
-        ax[2].legend()
+        # ax[2].plot(df_loss, label='Data Fit Loss', color='blue', marker='o', markersize=3, markevery=10)
+        # ax[2].plot(loss_logs, label='Total Loss', color='orange', marker='o', markersize=3, markevery=10)
+        # ax[2].set_xlabel('Iteration')
+        # ax[2].legend()
 
-        ax[3].scatter(y_masked.numpy(), y_est_opt, edgecolor='k', alpha=0.7)
-        ax[3].plot(np.linspace(0,y_masked.max()), np.linspace(0,y_masked.max()), linestyle='--', color="gray", linewidth=2, label="1:1")
-        ax[3].set_xlabel('Ground truth conductions')
-        ax[3].set_ylabel('Estimated conductions')
+        ax[2].scatter(y_masked.numpy(), y_est_opt, edgecolor='k', alpha=0.7)
+        ax[2].plot(np.linspace(0,y_masked.max()), np.linspace(0,y_masked.max()), linestyle='--', color="gray", linewidth=2, label="1:1")
+        ax[2].set_xlabel('Ground truth conductions')
+        ax[2].set_ylabel('Estimated conductions')
 
         fig.tight_layout()
         if not self.verbose:
@@ -336,26 +336,26 @@ class Experiments:
         ind = np.arange(n_groups)
         width = 0.35
 
-        fig, ax = plt.subplots(1, figsize=(14, 6))
+        fig, ax = plt.subplots(1, figsize=(9, 4))
 
         ax.cla()
         bp1 = ax.boxplot([samples_masked[i] for i in range(n_groups)],
-                        positions=ind - width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='C0'))
+                        positions=ind - width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='blue'))
         bp2 = ax.boxplot([samples_unmasked[i] for i in range(n_groups)],
-                            positions=ind + width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='C1'))
+                            positions=ind + width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='red'))
 
         # plot means and annotate
         for i, (m_s, m_u, s_s, s_u) in enumerate(zip(means_masked, means_unmasked, stds_masked, stds_unmasked)):
             ax.scatter(i - width/2, m_s, color='white', edgecolor='k', zorder=3)
-            ax.text(i - width/2 + 0.04, m_s, f"μ={m_s:.2f}\nσ={s_s:.2f}", va='center', fontsize=8)
+            # ax.text(i - width/2 + 0.04, m_s, f"μ={m_s:.2f}\nσ={s_s:.2f}", va='center', fontsize=8)
             ax.scatter(i + width/2, m_u, color='white', edgecolor='k', zorder=3)
-            ax.text(i + width/2 + 0.04, m_u, f"μ={m_u:.2f}\nσ={s_u:.2f}", va='center', fontsize=8)
+            # ax.text(i + width/2 + 0.04, m_u, f"μ={m_u:.2f}\nσ={s_u:.2f}", va='center', fontsize=8)
 
         # x labels using percentages
         ax.set_xticks(ind)
         ax.set_xticklabels([f"{int(p*100)}%" for p in percentages])
-        ax.set_xlabel('Percent missing observations')
-        ax.set_ylabel('Relative error in effective delay')
+        ax.set_xlabel('% missing')
+        ax.set_ylabel('Relative Error (Eff. delay)')
 
         # enlarge fonts and tick sizes for the figure and boxplots
         fontsize = 18
@@ -386,6 +386,11 @@ class Experiments:
         # Ensure xtick labels use the desired fontsize
         ax.set_xticks(ind)
         ax.set_xticklabels([f"{int(p*100)}%" for p in percentages], fontsize=fontsize)
+        ax.grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
 
         ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['w/ conduction', 'w/o conduction'], loc='upper left', prop={'size': 18})
 
@@ -471,26 +476,26 @@ class Experiments:
         ind = np.arange(n_groups)
         width = 0.35
 
-        fig, ax = plt.subplots(1, figsize=(14, 6))
+        fig, ax = plt.subplots(1, figsize=(9, 4))
 
         ax.cla()
         bp1 = ax.boxplot([samples_masked[i] for i in range(n_groups)],
-                        positions=ind - width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='C0'))
+                        positions=ind - width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='blue'))
         bp2 = ax.boxplot([samples_unmasked[i] for i in range(n_groups)],
-                            positions=ind + width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='C1'))
+                            positions=ind + width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='red'))
 
         # plot means and annotate
         for i, (m_s, m_u, s_s, s_u) in enumerate(zip(means_masked, means_unmasked, stds_masked, stds_unmasked)):
             ax.scatter(i - width/2, m_s, color='white', edgecolor='k', zorder=3)
-            ax.text(i - width/2 + 0.04, m_s, f"μ={m_s:.2f}\nσ={s_s:.2f}", va='center', fontsize=8)
+            # ax.text(i - width/2 + 0.04, m_s, f"μ={m_s:.2f}\nσ={s_s:.2f}", va='center', fontsize=8)
             ax.scatter(i + width/2, m_u, color='white', edgecolor='k', zorder=3)
-            ax.text(i + width/2 + 0.04, m_u, f"μ={m_u:.2f}\nσ={s_u:.2f}", va='center', fontsize=8)
+            # ax.text(i + width/2 + 0.04, m_u, f"μ={m_u:.2f}\nσ={s_u:.2f}", va='center', fontsize=8)
 
         # x labels using percentages
         ax.set_xticks(ind)
         ax.set_xticklabels([f"{int(p*100)}%" for p in percentages])
-        ax.set_xlabel('Percent missing observations')
-        ax.set_ylabel('Relative error in effective delay')
+        ax.set_xlabel('% missing')
+        ax.set_ylabel('Relative Error (Eff. delay)')
 
         # enlarge fonts and tick sizes for the figure and boxplots
         fontsize = 18
@@ -521,6 +526,11 @@ class Experiments:
         # Ensure xtick labels use the desired fontsize
         ax.set_xticks(ind)
         ax.set_xticklabels([f"{int(p*100)}%" for p in percentages], fontsize=fontsize)
+        ax.grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
 
         ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['w/ conduction', 'w/o conduction'], loc='upper left', prop={'size': 18})
 

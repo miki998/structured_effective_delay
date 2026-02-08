@@ -288,7 +288,7 @@ class Experiments:
 
             corr = stats.pearsonr(x, y)[0]
             
-            speed = (np.round(model_est_speed.coef_[0], 3)  * 100 // 1) / 100
+            speed = np.round((np.round(model_est_speed.coef_[0], 3)  * 100 // 1) / 100, 2)
             ax[r, c].scatter(x, y, color='k', alpha=0.7, edgecolors='k', s=10)
             ax[r, c].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
                         linewidth=2, color='r', linestyle='--', 

@@ -78,7 +78,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         os.makedirs(RESULTS_DIR, exist_ok=True)
 
         if fig1 is not None:
-            fig1_file = os.path.join(RESULTS_DIR, "experiment_figure1.png")
+            fig1_file = os.path.join(RESULTS_DIR, "hop_depth_2vs3.png")
             fig1.savefig(fig1_file, dpi=300)
 
         results_file = os.path.join(RESULTS_DIR, "experiment_results.json")
@@ -239,6 +239,11 @@ class Experiments:
         ax.tick_params(labelsize=20)
 
         ax.legend(fontsize=20)
+        ax.grid(axis='both', 
+        linestyle='--', 
+        alpha=0.7,
+        color='gray',
+        linewidth=0.5)
 
         fig.tight_layout()
         if not self.verbose:

@@ -74,7 +74,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         for i, fig in enumerate(figs1):
             if fig is not None:
                 fig.savefig(
-                    os.path.join(RESULTS_DIR, f"synthetic_graph_{i}.png"),
+                    os.path.join(RESULTS_DIR, f"solvers_synthetic_graph_{i}.png"),
                     dpi=300,
                     bbox_inches="tight",
                 )
@@ -82,7 +82,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         for i, fig in enumerate(figs2):
             if fig is not None:
                 fig.savefig(
-                    os.path.join(RESULTS_DIR, f"real_delays_{i}.png"),
+                    os.path.join(RESULTS_DIR, f"solvers_real_delays_{i}.png"),
                     dpi=300,
                     bbox_inches="tight",
                 )

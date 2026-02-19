@@ -17,7 +17,7 @@ import h5py
 from src import regmod
 from src import solver
 
-from src.utils import load_json, load, save, remove_diagonal_entries
+from src.utils import load_json, load, save, remove_diagonal_entries, add_diagonal_entries, add_cbar
 
 # Get the directory of this script for relative paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -66,13 +66,10 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     fig1, fig2, fig3 = None, None, None
     experiments = Experiments(config, verbose=verbose)
     print("\nRunning Experiment 1: Illustrate Delay Fill on synthetic delays")
-    fig1 = experiments.run_experiment1()
+    fig1, fig2 = experiments.run_experiment1()
 
     print("\nRunning Experiment 2: Results as a function of missing data percentage")
-    fig2 = experiments.run_experiment2()
-
-    print("\nRunning Experiment 3: Results on real data as a function of missing data percentage")
-    fig3 = experiments.run_experiment3()
+    # fig2 = experiments.run_experiment2()
 
     results = {
         "config": config,
@@ -90,13 +87,13 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
             )
         if fig2 is not None:
             fig2.savefig(
-                os.path.join(RESULTS_DIR, "synthetic_fill_in.png"),
+                os.path.join(RESULTS_DIR, "illustrative_fill_in_2.png"),
                 dpi=300,
                 bbox_inches="tight",
             )
         if fig3 is not None:
             fig3.savefig(
-                os.path.join(RESULTS_DIR, "real_data_fill_in.png"),
+                os.path.join(RESULTS_DIR, "increasing_missing_data.png"),
                 dpi=300,
                 bbox_inches="tight",
             )
@@ -117,6 +114,8 @@ class Experiments:
         self.config = config
         self.verbose = verbose
         self.path_to_resources = './resources/'
+        self.title_fontsize = 14
+        self.ticks_labels_fontsize = 12
 
         self.scale = self.config["scale"]
         self.age_range = self.config["age_range"]
@@ -128,6 +127,7 @@ class Experiments:
         self.l2_penalty = self.config["optimization_parameters"]["l2_penalty"]
         self.bundle_prob_thresh = self.config["bundle_prob_thresh"]
         self.max_path_depth = self.config["max_path_depth"]
+        self.missing_perc = self.config["missing_perc"]
         
         # F-TRACT 2018 data
         self.ftracts = load("/Users/mikichan/Desktop/mywork/data_resources/atlas_data/fiber_atlas_2018/Lausanne2018_FTRACT_NEW/agg_ftract_dict_allscales_age_ranges_delays_features.pkl")
@@ -188,7 +188,7 @@ class Experiments:
         return distrib.mean(), distrib.std()
 
     def run_experiment1(self):
-        a, delta = 0.5, 0.0
+        a, delta = 0.5, 0.1
 
         # Build design matrix
         design_shortest = regmod.apply_alpha_to_design(self.design_matrices, n_subopt=self.max_path_depth, alpha=a)
@@ -197,79 +197,75 @@ class Experiments:
 
         y_ground = solver.forward(design_model.float(), solver.torch.tensor(x_ground).float() + delta * (solver.torch.tensor(x_ground).float() > 0))
 
-        # Randomly remove 20% of the observations
         np.random.seed(99)
         y_non_complete = deepcopy(y_ground)
-        n_remove = int(0.2 * len(y_ground))
+        n_remove = int(self.missing_perc * len(y_ground))
         remove_indices = np.random.choice(len(y_ground), size=n_remove, replace=False)
         y_non_complete[remove_indices] = 0.0  # Set removed observations to zero
 
-        y_ground = solver.torch.tensor(deepcopy(y_non_complete))
+        y_incomplete = solver.torch.tensor(deepcopy(y_non_complete))
 
-        np.random.seed(99)
-        x_init = solver.torch.tensor(np.random.rand(len(x_ground))).requires_grad_(True)
-
-        if os.path.exists(op.join(DATA_DIR, "illustrate_delay_fill_results.pkl")):
-            x_opt, loss, loss_logs, df_loss = load(op.join(DATA_DIR, "illustrate_delay_fill_results.pkl"))
+        if os.path.exists(op.join(DATA_DIR, f"illustrate_delay_fill_results_{self.missing_perc}.pkl")):
+            x_opt, loss, loss_logs, df_loss = load(op.join(DATA_DIR, f"illustrate_delay_fill_results_{self.missing_perc}.pkl"))
         else:
+            np.random.seed(99)
+            x_init = solver.torch.tensor(np.random.rand(len(x_ground))).requires_grad_(True)
+
             x = deepcopy(x_init)
-            x_opt, loss, loss_logs, df_loss = solver.gradient_descent_solver(x, y_ground, design_model, delta=delta,
+            x_opt, loss, loss_logs, df_loss = solver.gradient_descent_solver(x, y_incomplete, design_model, delta=delta,
                                                         n_iter=self.n_iter, verbose=False, 
                                                         early_stop=self.early_stop, step_size=self.step_size,
                                                         l2_penalty=self.l2_penalty, return_logs=True)
-            save(op.join(DATA_DIR, "illustrate_delay_fill_results.pkl"), (x_opt, loss, loss_logs, df_loss))
+            save(op.join(DATA_DIR, f"illustrate_delay_fill_results_{self.missing_perc}.pkl"), (x_opt, loss, loss_logs, df_loss))
+
+        y_est_opt = solver.forward(design_model.float(), solver.torch.tensor(x_opt).float() + delta * (solver.torch.tensor(x_opt).float() > 0)).numpy()
+
+        y_ground_mat = add_diagonal_entries(y_ground.numpy().reshape(self.adj.shape[0], self.adj.shape[1]-1))
+        y_masked_mat = add_diagonal_entries(y_incomplete.numpy().reshape(self.adj.shape[0], self.adj.shape[1]-1))
+        y_est_opt_mat = add_diagonal_entries(y_est_opt.reshape(self.adj.shape[0], self.adj.shape[1]-1))
+
+        fig1, ax = plt.subplots(1, 3, figsize=(13, 4))
+
+        ax[0].imshow(y_ground_mat, cmap='gray')
+        add_cbar(fig1, ax[0], ticksize=self.ticks_labels_fontsize)
+        ax[0].set_title("Complete Conduction", fontsize=self.title_fontsize)
         
-        non_zero_mask = y_ground > 0
-        design_model_masked = design_model[non_zero_mask]
-        y_masked = y_ground[non_zero_mask]
+        ax[1].imshow(y_masked_mat, cmap='gray')
+        add_cbar(fig1, ax[1], ticksize=self.ticks_labels_fontsize)
+        ax[1].set_title(f"Masked \n({int(self.missing_perc*100)}% amiss)", fontsize=self.title_fontsize)
 
-        y_est_opt = solver.forward(design_model_masked.float(), solver.torch.tensor(x_opt).float() + delta * (solver.torch.tensor(x_opt).float() > 0)).numpy()
+        ax[2].imshow(y_est_opt_mat, cmap='gray')
+        add_cbar(fig1, ax[2], ticksize=self.ticks_labels_fontsize)
+        ax[2].set_title(f"Forward Conduction \n(After Fill-In)", fontsize=self.title_fontsize)
 
-        fig, ax = plt.subplots(1, 3, figsize=(11, 3))
+        for axe in ax:
+            axe.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
 
-        ax[0].scatter(x_ground[~non_zero_mask], x_opt[~non_zero_mask], edgecolor='k', alpha=0.7, color='red', label='w/o Conduction Delay')
-        ax[0].scatter(x_ground[non_zero_mask], x_opt[non_zero_mask], edgecolor='k', alpha=0.7, color='blue', label='w/ Conduction Delay')
-        ax[0].plot(np.linspace(0,x_ground.max()), np.linspace(0,x_ground.max()), linestyle='--', color="gray", linewidth=2, label="1:1")
-        ax[0].set_xlabel('Ground truth effective delays')
-        ax[0].set_ylabel('Estimated effective delays')
-        ax[0].legend()
+        fig1.tight_layout()
+        if not self.verbose:
+            plt.close()
+        plt.show()
+    
+        fig2, ax = plt.subplots(1, figsize=(6, 3))
 
-        deviation_percent_masked = self.relative_error(x_ground[non_zero_mask], x_opt[non_zero_mask])
-        deviation_percent = self.relative_error(x_ground[~non_zero_mask], x_opt[~non_zero_mask])
-        # create synthetic samples from the provided mean/std and plot a boxplot
-        np.random.seed(0)
-        means = [float(deviation_percent_masked[0]), float(deviation_percent[0])]
-        stds  = [float(deviation_percent_masked[1]), float(deviation_percent[1])]
-        n_samples = 1000
-        samples = [np.clip(np.random.normal(loc=m, scale=s, size=n_samples), a_min=0, a_max=None)
-                for m, s in zip(means, stds)]
+        ax.scatter(y_ground.numpy(), y_est_opt, color='blue', alpha=0.6, edgecolor='k')
+        ax.plot([y_ground.min(), y_ground.max()], [y_ground.min(), y_ground.max()], 'r--', label='Ideal Fit')
+        ax.set_xlabel('Forward Conduction', fontsize=self.title_fontsize)
+        ax.set_ylabel('Grd. Conduction', fontsize=self.title_fontsize)
 
-        ax[1].boxplot(samples, labels=['w/ conduction', 'w/o conduction'], showmeans=True)
-        for i, (m, s) in enumerate(zip(means, stds), start=1):
-            ax[1].scatter(i, m, color='red', zorder=3)
-            ax[1].text(i + 0.08, m, f"μ={m:.4f}\nσ={s:.4f}", va='center', fontsize=9)
+        ax.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
+        ax.grid(alpha=0.7, linestyle='--', color='gray', linewidth=0.5)
 
-        ax[1].set_ylabel('Relative error')
-
-        # ax[2].plot(df_loss, label='Data Fit Loss', color='blue', marker='o', markersize=3, markevery=10)
-        # ax[2].plot(loss_logs, label='Total Loss', color='orange', marker='o', markersize=3, markevery=10)
-        # ax[2].set_xlabel('Iteration')
-        # ax[2].legend()
-
-        ax[2].scatter(y_masked.numpy(), y_est_opt, edgecolor='k', alpha=0.7)
-        ax[2].plot(np.linspace(0,y_masked.max()), np.linspace(0,y_masked.max()), linestyle='--', color="gray", linewidth=2, label="1:1")
-        ax[2].set_xlabel('Ground truth conductions')
-        ax[2].set_ylabel('Estimated conductions')
-
-        fig.tight_layout()
+        fig2.tight_layout()
         if not self.verbose:
             plt.close()
         plt.show()
 
-        return fig
+        return fig1, fig2
 
     def run_experiment2(self):
-        a, delta = 0.5, 0.0
+        a, delta = 0.5, 0.1
+        
         # Build design matrix
         design_shortest = regmod.apply_alpha_to_design(self.design_matrices, n_subopt=self.max_path_depth, alpha=a)
         design_model = solver.torch.tensor(design_shortest)

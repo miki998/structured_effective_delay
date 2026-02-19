@@ -59,8 +59,8 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     figs2 = [None, None]  # Placeholder for figures from experiment 2
     figs3 = [None, None]  # Placeholder for figures from experiment 3
 
-    print("\nRunning Experiment 1: Synthetic Toy Graph")
-    figs1 = experiments.run_experiment1()
+    # print("\nRunning Experiment 1: Synthetic Toy Graph")
+    # figs1 = experiments.run_experiment1()
 
     print("\nRunning Experiment 2: Synthetic Bundle Probability Atlas")
     figs2 = experiments.run_experiment2()
@@ -117,6 +117,8 @@ class Experiments:
         self.config = config
         self.verbose = verbose
         self.path_to_resources = './resources/'
+        self.title_fontsize = 14
+        self.ticks_labels_fontsize = 12
         
         self.scale = self.config["scale"]
         self.age_range = self.config["age_range"]
@@ -235,15 +237,16 @@ class Experiments:
         self.gmregions_names = hf.get('header').get('gmregions')[()]
 
         consistency_view = self.get_aggprop(hf, 'consistency')
+        consistency_view = consistency_view.astype(float) / float(consistency_view.max()) # Normalize to [0,1]
         n = consistency_view.shape[0]
         adj = consistency_view[:n-1, :n-1]
         adj -= np.diag(np.diag(adj))
 
         adj = (adj > self.config['bundle_prob_thresh']).astype(int)
-        a, delta = 0.5, 0 # true hyperparameters
+        a, delta = 0.5, 0.5 # true hyperparameters
 
-        if op.exists(op.join(DATA_DIR, f"syn_bundle_exp_{a}_{delta}_{self.config['scale']}.pkl")):
-            design_model, x_ground, x_opt, loss = load(op.join(DATA_DIR, f"syn_bundle_exp_{a}_{delta}_{self.config['scale']}.pkl"))
+        if op.exists(op.join(DATA_DIR, f"syn_bundle_exp_{a}_{delta}_{self.config['scale']}_{self.config['bundle_prob_thresh']}.pkl")):
+            design_model, x_ground, x_opt, loss = load(op.join(DATA_DIR, f"syn_bundle_exp_{a}_{delta}_{self.config['scale']}_{self.config['bundle_prob_thresh']}.pkl"))
         else:
             design_model = regmod.build_design_shortest(adj, n_subopt=self.config['max_path_depth'], alpha=a)
             design_model = solver.torch.tensor(design_model)
@@ -260,7 +263,7 @@ class Experiments:
                                                 early_stop=self.early_stop, step_size=self.step_size,
                                                 l2_penalty=self.l2_penalty, delta=delta)
 
-            save(op.join(DATA_DIR, f"syn_bundle_exp_{a}_{delta}_{self.config['scale']}.pkl"), (design_model, x_ground, x_opt, loss))
+            save(op.join(DATA_DIR, f"syn_bundle_exp_{a}_{delta}_{self.config['scale']}_{self.config['bundle_prob_thresh']}.pkl"), (design_model, x_ground, x_opt, loss))
         
         x_ground_mat = add_diagonal_entries(x_ground.reshape(adj.shape[0], adj.shape[1]-1))
         x_pred_mat = add_diagonal_entries(x_opt.reshape(adj.shape[0], adj.shape[1]-1))
@@ -272,17 +275,19 @@ class Experiments:
 
 
         fig1, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
-        axes[0].imshow(x_ground_mat, cmap='gray')
-        axes[0].set_title("Effective $x=\mathbf{1}$\n (if bundle)")
-        add_cbar(fig1, axes[0])
+        axes[0].imshow(y_ground_mat, cmap='gray')
+        axes[0].set_title("Conduction", fontsize=self.title_fontsize)
+        add_cbar(fig1, axes[0], ticksize=self.ticks_labels_fontsize)
         axes[1].imshow(x_pred_mat, cmap='gray')#, vmax=y_pred_mat.max())
-        axes[1].set_title(f"Estimated Effective")
-        add_cbar(fig1, axes[1])
-        axes[2].scatter(x_ground, x_opt, s=20, alpha=.5, edgecolors="black", color='blue')
-        axes[2].plot(np.linspace(x_ground.min(), x_ground.max()), np.linspace(x_ground.min(), x_ground.max()), linestyle='--', color='gray', linewidth=2, label="1:1")
-        axes[2].set_xlabel("Effective Ground", fontsize=12)
-        axes[2].set_ylabel("Effective Predicted", fontsize=12)
-        axes[2].legend(fontsize=12)
+        axes[1].set_title(f"Estimated Effective", fontsize=self.title_fontsize)
+        add_cbar(fig1, axes[1], ticksize=self.ticks_labels_fontsize)
+        axes[2].imshow(x_ground_mat, cmap='gray')#, vmax=y_pred_mat.max())
+        axes[2].set_title(f"Real Effective", fontsize=self.title_fontsize)
+        add_cbar(fig1, axes[2], ticksize=self.ticks_labels_fontsize)
+
+        for ax in axes:
+            ax.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
+
         fig1.tight_layout()
         if not self.verbose:
             plt.close()
@@ -297,9 +302,9 @@ class Experiments:
         add_cbar(fig2, ax[1])
         ax[2].scatter(y_ground.numpy(), y_est.numpy(), s=20, alpha=.5, edgecolors="black", color='blue')
         ax[2].plot(np.linspace(y_ground.numpy().min(), y_ground.numpy().max()), np.linspace(y_ground.numpy().min(), y_ground.numpy().max()), linestyle='--', color='gray', linewidth=2, label="1:1")
-        ax[2].set_xlabel("Conductance Estimated", fontsize=12)
-        ax[2].set_ylabel("Conductance Predicted", fontsize=12)
-        ax[2].legend(fontsize=12)
+        ax[2].set_xlabel("Conductance Estimated", fontsize=self.title_fontsize)
+        ax[2].set_ylabel("Conductance Predicted", fontsize=self.title_fontsize)
+        ax[2].legend(fontsize=self.ticks_labels_fontsize)
         fig2.tight_layout()
         if not self.verbose:
             plt.close()

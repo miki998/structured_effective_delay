@@ -84,19 +84,19 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
         os.makedirs(RESULTS_DIR, exist_ok=True)
         if fig1 is not None:
             fig1.savefig(
-                os.path.join(RESULTS_DIR, "illustrative_missing_percentage.png"),
+                os.path.join(RESULTS_DIR, "illustrative_fill_in.png"),
                 dpi=300,
                 bbox_inches="tight",
             )
         if fig2 is not None:
             fig2.savefig(
-                os.path.join(RESULTS_DIR, "synthetic_conduction_missing_percentages.png"),
+                os.path.join(RESULTS_DIR, "synthetic_fill_in.png"),
                 dpi=300,
                 bbox_inches="tight",
             )
         if fig3 is not None:
             fig3.savefig(
-                os.path.join(RESULTS_DIR, "real_data_missing_percentages.png"),
+                os.path.join(RESULTS_DIR, "real_data_fill_in.png"),
                 dpi=300,
                 bbox_inches="tight",
             )
@@ -141,17 +141,18 @@ class Experiments:
         self.gmregions_names = hf.get('header').get('gmregions')[()]
 
         consistency_view = self.get_aggprop(hf, 'consistency')
+        consistency_view = consistency_view.astype(float) / float(consistency_view.max()) # Normalize to [0,1]
         self.n = consistency_view.shape[0]
         adj = consistency_view[:self.n-1, :self.n-1]
         adj -= np.diag(np.diag(adj))
 
         self.adj = (adj > self.bundle_prob_thresh).astype(int)
 
-        if op.exists(op.join(DATA_DIR, f"design_matrices_{self.scale}_{self.age_range}_{self.delay_max}_maxdepth_{self.max_path_depth}.pkl")):
-            self.design_matrices = load(op.join(DATA_DIR, f"design_matrices_{self.scale}_{self.age_range}_{self.delay_max}_maxdepth_{self.max_path_depth}.pkl"))
+        if op.exists(op.join(DATA_DIR, f"design_matrices_{self.scale}_{self.age_range}_{self.delay_max}_maxdepth_{self.max_path_depth}_thresh_{self.bundle_prob_thresh}.pkl")):
+            self.design_matrices = load(op.join(DATA_DIR, f"design_matrices_{self.scale}_{self.age_range}_{self.delay_max}_maxdepth_{self.max_path_depth}_thresh_{self.bundle_prob_thresh}.pkl"))
         else:
             self.design_matrices = regmod.get_shortest_matrices(self.adj, self.max_path_depth, progress=True)
-            save(op.join(DATA_DIR, f"design_matrices_{self.scale}_{self.age_range}_{self.delay_max}_maxdepth_{self.max_path_depth}.pkl"), self.design_matrices)
+            save(op.join(DATA_DIR, f"design_matrices_{self.scale}_{self.age_range}_{self.delay_max}_maxdepth_{self.max_path_depth}_thresh_{self.bundle_prob_thresh}.pkl"), self.design_matrices)
 
     def get_aggprop(self, h5dict: h5py._hl.files.File, property: str):
         """

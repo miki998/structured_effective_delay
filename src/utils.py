@@ -60,7 +60,7 @@ def load(pickle_filename: str) -> object:
         b = pickle.load(handle)
     return b
 
-def add_cbar(fig, ax, **kwargs):
+def add_cbar(fig, ax, ticksize=10, **kwargs):
     """Add a colorbar to an existing figure/axis.
 
     Parameters
@@ -79,7 +79,8 @@ def add_cbar(fig, ax, **kwargs):
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-    fig.colorbar(ax.get_children()[0], cax=cax, orientation="vertical", **kwargs)
+    cbar = fig.colorbar(ax.get_children()[0], cax=cax, orientation="vertical", **kwargs)
+    cbar.ax.tick_params(labelsize=ticksize)
     return fig, ax
 
 

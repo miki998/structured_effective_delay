@@ -63,14 +63,14 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     if verbose:
         print(f"\nConfiguration: {config}")
 
-    fig1, fig2, = None, None
+    fig1, fig2, fig3 = None, None, None
     experiments = Experiments(config, verbose=verbose)
     
     print("\nRunning Experiment 1: Effect of missing data percentage on delay estimation")
-    fig1 = experiments.run_experiment1()
+    fig1, fig2 = experiments.run_experiment1()
 
     print("\nRunning Experiment 2: Increasing missing data percentage on synthetic bundle probability atlas")
-    fig2 = experiments.run_experiment2()
+    fig3 = experiments.run_experiment2()
 
     results = {
         "config": config,
@@ -88,6 +88,12 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
             )
         if fig2 is not None:
             fig2.savefig(
+                os.path.join(RESULTS_DIR, "illustrative_missing_percentage2.png"),
+                dpi=300,
+                bbox_inches="tight",
+            )
+        if fig3 is not None:
+            fig3.savefig(
                 os.path.join(RESULTS_DIR, "synthetic_conduction_missing_percentages.png"),
                 dpi=300,
                 bbox_inches="tight",
@@ -222,7 +228,7 @@ class Experiments:
 
 
         # Plotting
-        fig, ax = plt.subplots(1, 3, figsize=(10, 3.3))
+        fig1, ax = plt.subplots(1, 3, figsize=(10, 3.3))
 
         x_ground_mat = add_diagonal_entries(x_ground.reshape(self.adj.shape[0], self.adj.shape[1]-1))
         x_opt_c_mat = add_diagonal_entries(x_opt_c.reshape(self.adj.shape[0], self.adj.shape[1]-1))
@@ -231,14 +237,23 @@ class Experiments:
         diff2 = (x_ground_mat - x_opt_mat)
         vmax = max(np.abs(diff.min()), np.abs(diff2.min()), diff.max(), diff2.max())
 
-        ax[0].imshow(diff, cmap='bwr', vmin=-vmax, vmax=vmax)
-        ax[0].set_title("(Grd. Eff. - .) w/ missing", fontsize=self.title_fontsize)
-        add_cbar(fig, ax[0], ticksize=self.ticks_fontsize)
-        ax[1].imshow(diff2, cmap='bwr', vmin=-vmax, vmax=vmax)
-        ax[1].set_title("(Grd. Eff. - .) w/o missing", fontsize=self.title_fontsize)
-        add_cbar(fig, ax[1], ticksize=self.ticks_fontsize)
+        ax[0].imshow(x_ground_mat, cmap='gray')
+        ax[0].set_title("Grd. Eff.", fontsize=self.title_fontsize)
+        add_cbar(fig1, ax[0], ticksize=self.ticks_fontsize)
+        ax[1].imshow(diff, cmap='bwr', vmin=-vmax, vmax=vmax)
+        ax[1].set_title("(Grd. Eff. - .) w/ missing", fontsize=self.title_fontsize)
+        add_cbar(fig1, ax[1], ticksize=self.ticks_fontsize)
+        ax[2].imshow(diff2, cmap='bwr', vmin=-vmax, vmax=vmax)
+        ax[2].set_title("(Grd. Eff. - .) w/o missing", fontsize=self.title_fontsize)
+        add_cbar(fig1, ax[2], ticksize=self.ticks_fontsize)
+        
+        fig1.tight_layout()
+        if not self.verbose:
+            plt.close()
+        plt.show()
 
-        bp = ax[2].boxplot(
+        fig2, ax = plt.subplots(1, figsize=(5, 4))
+        bp = ax.boxplot(
             [diff.flatten(), diff2.flatten()],
             labels=["w/ missing", "w/o missing"],
             patch_artist=True,
@@ -248,15 +263,14 @@ class Experiments:
         colors = ["skyblue", "lightcoral"]
         for patch, color in zip(bp["boxes"], colors):
             patch.set_facecolor(color)
-        ax[2].set_title("Distribution of differences", fontsize=self.title_fontsize)
-        ax[2].tick_params(axis="both", labelsize=self.ticks_fontsize)
-        
-        fig.tight_layout()
+        ax.set_title("Distribution of differences", fontsize=self.title_fontsize)
+        ax.tick_params(axis="both", labelsize=self.ticks_fontsize)
+        fig2.tight_layout()
         if not self.verbose:
             plt.close()
         plt.show()
 
-        return fig
+        return fig1, fig2
 
     def run_experiment2(self):
         a, delta = 0.5, 0.1

@@ -148,8 +148,10 @@ class Experiments:
         self.gmregions_names = hf.get('header').get('gmregions')[()]
 
         consistency_view = self.get_aggprop(hf, 'consistency')
+        consistency_view = consistency_view.astype(float) / float(consistency_view.max()) # Normalize to [0,1]
+
         n = consistency_view.shape[0]
-        adj = consistency_view[:n-1, :n-1]
+        adj = consistency_view
         adj -= np.diag(np.diag(adj))
 
         adj = (adj > self.config['bundle_prob_thresh']).astype(int)
@@ -207,7 +209,7 @@ class Experiments:
         y_ground_mat = add_diagonal_entries(y_ground.numpy().reshape(adj.shape[0], adj.shape[1]-1))
 
         colors = ['blue', 'orange', 'green', 'red']
-        fig1, axes = plt.subplots(nrows=2, ncols=3, figsize=(11, 6))
+        fig1, axes = plt.subplots(nrows=2, ncols=3, figsize=(10, 6))
         axes[0, 0].imshow(x_ground_mat, cmap='gray')
         axes[0, 0].set_title("Effective delays $x=\mathbf{1}$\n (if bundle)")
         add_cbar(fig1, axes[0, 0])
@@ -230,7 +232,7 @@ class Experiments:
             plt.close()
         plt.show()
 
-        fig2, ax = plt.subplots(2, 3, figsize=(11, 6))
+        fig2, ax = plt.subplots(2, 3, figsize=(10, 6))
         ax[0, 0].set_title('Ground Truth')
         ax[0, 0].imshow(y_ground_mat, cmap='gray')
         add_cbar(fig2, ax[0, 0])
@@ -270,29 +272,38 @@ class Experiments:
         return fig1, fig2
 
     def run_experiment2(self):
-        # Experiment on Real Conductance Delays
+        # Experiment on Real Conduction Delays
         hf = h5py.File(self.path_to_bundle_atlas, 'r')
         self.gmregions_names = hf.get('header').get('gmregions')[()]
 
         consistency_view = self.get_aggprop(hf, 'consistency')
+        consistency_view = consistency_view.astype(float) / float(consistency_view.max()) # Normalize to [0,1]
+
         n = consistency_view.shape[0]
-        adj = consistency_view[:n-1, :n-1]
+        adj = consistency_view
         adj = (adj > self.config['bundle_prob_thresh']).astype(int)
 
         # Conductance delays from F-TRACT 2018
-        prob_thresh = 0.0
+        prob_thresh = self.config['ftract_prob_thresh'] # Threshold for F-TRACT probabilities to consider a connection as present
         delay_to_compare = 100
+
         dict_key = f"scale{self.scale}__{self.age_range}__{self.delay_max}__{self.feature}"
         dict_key_compare = f"scale{self.scale}__{self.age_range}__{delay_to_compare}__{self.feature}"
 
+        prob_dict_key = f"scale{self.scale}__{self.age_range}__{self.delay_max}__probability"
+        prob_dict_key_compare = f"scale{self.scale}__{self.age_range}__{100}__probability"
+
+        prob_y_ground = self.ftracts[prob_dict_key][:n, :n]
+        prob_y_ground_compare = self.ftracts[prob_dict_key_compare][:n, :n]
+
         y_ground_mat = self.ftracts[dict_key]
-        y_ground_mat = y_ground_mat[:n-1, :n-1]
-        y_ground_mat *= (y_ground_mat > prob_thresh)
+        y_ground_mat = y_ground_mat[:n, :n]
+        y_ground_mat *= (prob_y_ground > prob_thresh)
         y_ground = solver.torch.tensor(remove_diagonal_entries(y_ground_mat).flatten())
 
         y_ground_mat_compare = self.ftracts[dict_key_compare]
-        y_ground_mat_compare = y_ground_mat_compare[:n-1, :n-1]
-        y_ground_mat_compare *= (y_ground_mat_compare > prob_thresh)
+        y_ground_mat_compare = y_ground_mat_compare[:n, :n]
+        y_ground_mat_compare *= (prob_y_ground_compare > prob_thresh)
         y_ground_compare = solver.torch.tensor(remove_diagonal_entries(y_ground_mat_compare).flatten())
 
         guess_a, guess_delta = 0.5, 0.0

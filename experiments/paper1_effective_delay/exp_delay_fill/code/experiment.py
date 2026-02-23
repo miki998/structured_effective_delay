@@ -69,7 +69,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     fig1, fig2 = experiments.run_experiment1()
 
     print("\nRunning Experiment 2: Results as a function of missing data percentage")
-    # fig2 = experiments.run_experiment2()
+    fig3 = experiments.run_experiment2()
 
     results = {
         "config": config,
@@ -199,8 +199,8 @@ class Experiments:
 
         np.random.seed(99)
         y_non_complete = deepcopy(y_ground)
-        n_remove = int(self.missing_perc * len(y_ground))
-        remove_indices = np.random.choice(len(y_ground), size=n_remove, replace=False)
+        n_remove = int(self.missing_perc * (y_ground > 0).sum())
+        remove_indices = np.random.choice(np.where(y_ground > 0)[0], size=n_remove, replace=False)
         y_non_complete[remove_indices] = 0.0  # Set removed observations to zero
 
         y_incomplete = solver.torch.tensor(deepcopy(y_non_complete))
@@ -273,226 +273,54 @@ class Experiments:
 
         y_ground = solver.forward(design_model.float(), solver.torch.tensor(x_ground).float() + delta * (solver.torch.tensor(x_ground).float() > 0))
 
-        n_samples = 1000
-        np.random.seed(99)
-        percentages = np.linspace(0, 0.9, 6)
+        percentages = np.linspace(0, 0.9, 10)
 
         x_ground = remove_diagonal_entries(self.adj).flatten().astype(float)
-        deviations = []
-        deviations_masked = []
 
-        if os.path.exists(op.join(DATA_DIR, "synthetic_delay_fill_results.pkl")):
-            deviations, deviations_masked = load(op.join(DATA_DIR, "synthetic_delay_fill_results.pkl"))
+        y_ground = solver.forward(design_model.float(), solver.torch.tensor(x_ground).float() + delta * (solver.torch.tensor(x_ground).float() > 0))
+
+        if os.path.exists(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl")):
+            x_opts = load(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl"))
         else:
-            for p in tqdm(percentages, total=len(percentages)):
-                # Randomly remove p% of the observations
-                y_ground = solver.forward(design_model.float(), solver.torch.tensor(x_ground).float() + delta * (solver.torch.tensor(x_ground).float() > 0))
-                y_non_complete = deepcopy(y_ground)
-                n_remove = int(p * len(y_ground))
-                remove_indices = np.random.choice(len(y_ground), size=n_remove, replace=False)
-                y_non_complete[remove_indices] = 0.0  # Set removed observations to zero
-
-                y_ground = solver.torch.tensor(deepcopy(y_non_complete))
-
-                x_init = solver.torch.tensor(np.random.rand(len(x_ground))).requires_grad_(True)
-
-                non_zero_mask = y_ground > 0
-
-                x_opt, _ = solver.gradient_descent_solver(x_init, y_ground, design_model, delta=delta,
-                                                        n_iter=self.n_iter, verbose=False, 
-                                                        early_stop=self.early_stop, step_size=self.step_size,
-                                                        l2_penalty=self.l2_penalty)
-                
-                deviation_percent_masked = self.relative_error(x_ground[non_zero_mask], x_opt[non_zero_mask])
-                deviation_percent = self.relative_error(x_ground[~non_zero_mask], x_opt[~non_zero_mask])
-                
-                deviations.append(deviation_percent)
-                deviations_masked.append(deviation_percent_masked)
-                save(op.join(DATA_DIR, "synthetic_delay_fill_results.pkl"), (deviations, deviations_masked))
-
-        # Adapted: create synthetic samples for lists of deviations and plot grouped boxplots
-        np.random.seed(0)
-
-        # extract means and stds from the lists, handle NaNs
-        means_masked = [float(m[0]) if not np.isnan(m[0]) else 0.0 for m in deviations_masked]
-        stds_masked  = [float(m[1]) if not np.isnan(m[1]) else 0.0 for m in deviations_masked]
-
-        means_unmasked = [float(m[0]) if not np.isnan(m[0]) else 0.0 for m in deviations]
-        stds_unmasked  = [float(m[1]) if not np.isnan(m[1]) else 0.0 for m in deviations]
-
-        # generate samples (ensure non-negative)
-        samples_masked = [np.clip(np.random.normal(loc=mu, scale=sigma if sigma>0 else 0.0, size=n_samples),
-                                a_min=0, a_max=None)
-                        for mu, sigma in zip(means_masked, stds_masked)]
-        samples_unmasked = [np.clip(np.random.normal(loc=mu, scale=sigma if sigma>0 else 0.0, size=n_samples),
-                                    a_min=0, a_max=None)
-                            for mu, sigma in zip(means_unmasked, stds_unmasked)]
-
-        # prepare grouped boxplot positions
-        n_groups = len(samples_masked)
-        ind = np.arange(n_groups)
-        width = 0.35
-
-        fig, ax = plt.subplots(1, figsize=(9, 4))
-
-        ax.cla()
-        bp1 = ax.boxplot([samples_masked[i] for i in range(n_groups)],
-                        positions=ind - width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='blue'))
-        bp2 = ax.boxplot([samples_unmasked[i] for i in range(n_groups)],
-                            positions=ind + width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='red'))
-
-        # plot means and annotate
-        for i, (m_s, m_u, s_s, s_u) in enumerate(zip(means_masked, means_unmasked, stds_masked, stds_unmasked)):
-            ax.scatter(i - width/2, m_s, color='white', edgecolor='k', zorder=3)
-            # ax.text(i - width/2 + 0.04, m_s, f"μ={m_s:.2f}\nσ={s_s:.2f}", va='center', fontsize=8)
-            ax.scatter(i + width/2, m_u, color='white', edgecolor='k', zorder=3)
-            # ax.text(i + width/2 + 0.04, m_u, f"μ={m_u:.2f}\nσ={s_u:.2f}", va='center', fontsize=8)
-
-        # x labels using percentages
-        ax.set_xticks(ind)
-        ax.set_xticklabels([f"{int(p*100)}%" for p in percentages])
-        ax.set_xlabel('% missing')
-        ax.set_ylabel('Relative Error (Eff. delay)')
-
-        # enlarge fonts and tick sizes for the figure and boxplots
-        fontsize = 18
-        tick_labelsize = 18
-        text_fontsize = 12
-
-        # Apply to all axes in the current figure
-        for a in fig.axes:
-            # axis labels and title
-            if a.title:
-                a.title.set_fontsize(fontsize + 2)
-            a.xaxis.label.set_fontsize(fontsize)
-            a.yaxis.label.set_fontsize(fontsize)
-            # ticks
-            a.tick_params(axis='both', which='major', labelsize=tick_labelsize, width=1.2, length=6)
-            a.tick_params(axis='both', which='minor', labelsize=tick_labelsize-2, width=1.0, length=4)
-            # any manual text annotations
-            for t in a.texts:
-                t.set_fontsize(text_fontsize)
-            # legend (if present)
-            leg = a.get_legend()
-            if leg is not None:
-                for txt in leg.get_texts():
-                    txt.set_fontsize(text_fontsize)
-                if leg.get_title():
-                    leg.get_title().set_fontsize(text_fontsize)
-
-        # Ensure xtick labels use the desired fontsize
-        ax.set_xticks(ind)
-        ax.set_xticklabels([f"{int(p*100)}%" for p in percentages], fontsize=fontsize)
-        ax.grid(axis='both', 
-                linestyle='--', 
-                alpha=0.7,
-                color='gray',
-                linewidth=0.5)
-
-        ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['w/ conduction', 'w/o conduction'], loc='upper left', prop={'size': 18})
-
-        # increase overall figure title / layout if any
-        fig.tight_layout(rect=[0, 0, 1, 0.98])
-        if not self.verbose:
-            plt.close()
-        plt.show()
-
-        return fig
-    
-    def run_experiment3(self):
-        a, delta = 0.5, 0.0
-        # Build design matrix
-        design_shortest = regmod.apply_alpha_to_design(self.design_matrices, n_subopt=self.max_path_depth, alpha=a)
-        design_model = solver.torch.tensor(design_shortest)
-        x_ground = remove_diagonal_entries(self.adj).flatten().astype(float)
-
-        np.random.seed(99)
-        percentages = np.linspace(0, 0.9, 6)
-
-        x_ground = remove_diagonal_entries(self.adj).flatten().astype(float)
-        deviations = []
-        deviations_masked = []
-
-        dict_key = f"scale{self.scale}__{self.age_range}__{self.delay_max}__{self.feature}"
-
-        if os.path.exists(op.join(DATA_DIR, "real_delay_fill_results.pkl")):
-            deviations, deviations_masked = load(op.join(DATA_DIR, "real_delay_fill_results.pkl"))
-        else:
+            x_opts = []
             for p in tqdm(percentages, total=len(percentages)):
                 np.random.seed(99)
                 # Randomly remove p% of the observations
-                prob_thresh = 0.0
-                y_ground_mat = self.ftracts[dict_key]
-                y_ground_mat = y_ground_mat[:self.n-1, :self.n-1]
-                y_ground_mat *= (y_ground_mat > prob_thresh)
-                y_ground = remove_diagonal_entries(y_ground_mat).flatten()
                 y_non_complete = deepcopy(y_ground)
-                n_remove = int(p * len(y_ground))
-                remove_indices = np.random.choice(len(y_ground), size=n_remove, replace=False)
+                n_remove = int(p * (y_ground > 0).sum())
+                remove_indices = np.random.choice(np.where(y_ground > 0)[0], size=n_remove, replace=False)
                 y_non_complete[remove_indices] = 0.0  # Set removed observations to zero
 
-                y_ground = solver.torch.tensor(deepcopy(y_non_complete))
+                y_incomplete = solver.torch.tensor(deepcopy(y_non_complete))
 
                 x_init = solver.torch.tensor(np.random.rand(len(x_ground))).requires_grad_(True)
 
-                non_zero_mask = y_ground > 0
-
-                x_opt, _ = solver.gradient_descent_solver(x_init, y_ground, design_model, delta=delta,
+                x_opt, _ = solver.gradient_descent_solver(x_init, y_incomplete, design_model, delta=delta,
                                                         n_iter=self.n_iter, verbose=False, 
                                                         early_stop=self.early_stop, step_size=self.step_size,
                                                         l2_penalty=self.l2_penalty)
-                
-                deviation_percent_masked = self.relative_error(x_ground[non_zero_mask], x_opt[non_zero_mask])
-                deviation_percent = self.relative_error(x_ground[~non_zero_mask], x_opt[~non_zero_mask])
-                
-                deviations.append(deviation_percent)
-                deviations_masked.append(deviation_percent_masked)
-                save(op.join(DATA_DIR, "real_delay_fill_results.pkl"), (deviations, deviations_masked))
+                x_opts.append(x_opt)
+            save(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl"), x_opts)
 
-        # Adapted: create synthetic samples for lists of deviations and plot grouped boxplots
-        np.random.seed(0)
 
-        # extract means and stds from the lists, handle NaNs
-        means_masked = [float(m[0]) if not np.isnan(m[0]) else 0.0 for m in deviations_masked]
-        stds_masked  = [float(m[1]) if not np.isnan(m[1]) else 0.0 for m in deviations_masked]
+        y_est_opts = [solver.forward(design_model.float(), solver.torch.tensor(x_opt).float() + delta * (solver.torch.tensor(x_opt).float() > 0)).numpy() for x_opt in x_opts]
 
-        means_unmasked = [float(m[0]) if not np.isnan(m[0]) else 0.0 for m in deviations]
-        stds_unmasked  = [float(m[1]) if not np.isnan(m[1]) else 0.0 for m in deviations]
-
-        # generate samples (ensure non-negative)
-        n_samples = 1000
-        samples_masked = [np.clip(np.random.normal(loc=mu, scale=sigma if sigma>0 else 0.0, size=n_samples),
-                                a_min=0, a_max=None)
-                        for mu, sigma in zip(means_masked, stds_masked)]
-        samples_unmasked = [np.clip(np.random.normal(loc=mu, scale=sigma if sigma>0 else 0.0, size=n_samples),
-                                    a_min=0, a_max=None)
-                            for mu, sigma in zip(means_unmasked, stds_unmasked)]
-
-        # prepare grouped boxplot positions
-        n_groups = len(samples_masked)
-        ind = np.arange(n_groups)
-        width = 0.35
+        diff_opts = [y_est_opt - y_ground.numpy() for y_est_opt in y_est_opts]
+        rel_error_opts = [np.abs(diff) / np.abs(y_ground.numpy()) for diff in diff_opts]
 
         fig, ax = plt.subplots(1, figsize=(9, 4))
 
+        ind = np.arange(len(percentages))
+        width = 0.6
         ax.cla()
-        bp1 = ax.boxplot([samples_masked[i] for i in range(n_groups)],
-                        positions=ind - width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='blue'))
-        bp2 = ax.boxplot([samples_unmasked[i] for i in range(n_groups)],
-                            positions=ind + width/2, widths=width, patch_artist=True, boxprops=dict(facecolor='red'))
-
-        # plot means and annotate
-        for i, (m_s, m_u, s_s, s_u) in enumerate(zip(means_masked, means_unmasked, stds_masked, stds_unmasked)):
-            ax.scatter(i - width/2, m_s, color='white', edgecolor='k', zorder=3)
-            # ax.text(i - width/2 + 0.04, m_s, f"μ={m_s:.2f}\nσ={s_s:.2f}", va='center', fontsize=8)
-            ax.scatter(i + width/2, m_u, color='white', edgecolor='k', zorder=3)
-            # ax.text(i + width/2 + 0.04, m_u, f"μ={m_u:.2f}\nσ={s_u:.2f}", va='center', fontsize=8)
-
-        # x labels using percentages
-        ax.set_xticks(ind)
-        ax.set_xticklabels([f"{int(p*100)}%" for p in percentages])
-        ax.set_xlabel('% missing')
-        ax.set_ylabel('Relative Error (Eff. delay)')
+        bp1 = ax.boxplot([rel_error_opts[i] for i in range(1, len(rel_error_opts))],
+                        positions=ind[1:], widths=width, patch_artist=True, boxprops=dict(facecolor='blue'))
+        
+        bp2 = ax.boxplot([rel_error_opts[0]],
+                 positions=[ind[0]],
+                 widths=width,
+                 patch_artist=True,
+                 boxprops=dict(facecolor='red'))
 
         # enlarge fonts and tick sizes for the figure and boxplots
         fontsize = 18
@@ -528,8 +356,11 @@ class Experiments:
                 alpha=0.7,
                 color='gray',
                 linewidth=0.5)
+        
+        ax.set_xlabel('% missing')
+        ax.set_ylabel('Cond. Relative Error')
 
-        ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['w/ conduction', 'w/o conduction'], loc='upper left', prop={'size': 18})
+        ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['missing', 'complete'], loc='upper left', prop={'size': 18})
 
         # increase overall figure title / layout if any
         fig.tight_layout(rect=[0, 0, 1, 0.98])
@@ -537,7 +368,8 @@ class Experiments:
             plt.close()
         plt.show()
 
-        return fig
 
+        return fig
+    
 if __name__ == "__main__":
     run()

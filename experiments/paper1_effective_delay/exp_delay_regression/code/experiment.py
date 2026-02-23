@@ -238,8 +238,8 @@ class Experiments:
 
         consistency_view = self.get_aggprop(hf, 'consistency')
         consistency_view = consistency_view.astype(float) / float(consistency_view.max()) # Normalize to [0,1]
-        n = consistency_view.shape[0]
-        adj = consistency_view[:n-1, :n-1]
+
+        adj = consistency_view
         adj -= np.diag(np.diag(adj))
 
         adj = (adj > self.config['bundle_prob_thresh']).astype(int)
@@ -318,45 +318,53 @@ class Experiments:
         self.gmregions_names = hf.get('header').get('gmregions')[()]
 
         consistency_view = self.get_aggprop(hf, 'consistency')
+        consistency_view = consistency_view.astype(float) / float(consistency_view.max()) # Normalize to [0,1]
+
         n = consistency_view.shape[0]
-        adj = consistency_view[:n-1, :n-1]
+        adj = consistency_view
         adj = (adj > self.config['bundle_prob_thresh']).astype(int)
 
         # Conductance delays from F-TRACT 2018
-        prob_thresh = 0.0
-
         dict_key = f"scale{self.scale}__{self.age_range}__{self.delay_max}__{self.feature}"
         dict_key_compare = f"scale{self.scale}__{self.age_range}__{100}__{self.feature}"
 
-        y_ground_mat = self.ftracts[dict_key]
-        y_ground_mat = y_ground_mat[:n-1, :n-1]
-        y_ground_mat *= (y_ground_mat > prob_thresh)
+        prob_dict_key = f"scale{self.scale}__{self.age_range}__{self.delay_max}__probability"
+        prob_dict_key_compare = f"scale{self.scale}__{self.age_range}__{100}__probability"
+
+        prob_y_ground = self.ftracts[prob_dict_key][:n, :n]
+        prob_y_ground_compare = self.ftracts[prob_dict_key_compare][:n, :n]
+
+        prob_thresh = self.config['ftract_prob_thresh'] # Threshold for F-TRACT probabilities to consider a connection as present
+        y_ground_mat = self.ftracts[dict_key][:n, :n]
+        y_ground_mat *= (prob_y_ground > prob_thresh)
         y_ground = solver.torch.tensor(remove_diagonal_entries(y_ground_mat).flatten())
 
-        y_ground_mat_compare = self.ftracts[dict_key_compare]
-        y_ground_mat_compare = y_ground_mat_compare[:n-1, :n-1]
-        y_ground_mat_compare *= (y_ground_mat_compare > prob_thresh)
+        y_ground_mat_compare = self.ftracts[dict_key_compare][:n, :n]
+        y_ground_mat_compare *= (prob_y_ground_compare > prob_thresh)
         y_ground_compare = solver.torch.tensor(remove_diagonal_entries(y_ground_mat_compare).flatten())
 
-        a, delta = 0.8, 0 # assumed hyperparameters
+        guess_a, guess_delta = 0.8, 10. # assumed hyperparameters
 
-        if os.path.exists(op.join(DATA_DIR, f"ftract_delay_regress_alpha_{a}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
-            design_model, x_opt, loss = load(op.join(DATA_DIR, f"ftract_delay_regress_alpha_{a}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
+        if os.path.exists(op.join(DATA_DIR, f"design_matrix_{self.scale}.pkl")):
+            design_matrices, design_model = load(op.join(DATA_DIR, f"design_matrix_{self.scale}.pkl"))
         else:
             design_matrices = regmod.get_shortest_matrices(adj, self.config['max_path_depth'], progress=True)
-            design_shortest = regmod.apply_alpha_to_design(design_matrix=design_matrices, n_subopt=self.config['max_path_depth'], alpha=a)
+            design_shortest = regmod.apply_alpha_to_design(design_matrix=design_matrices, n_subopt=self.config['max_path_depth'], alpha=guess_a)
             design_model = solver.torch.tensor(design_shortest)
+            save(op.join(DATA_DIR, f"design_matrix_{self.scale}.pkl"), (design_matrices, design_model))
 
+        if os.path.exists(op.join(DATA_DIR, f"ftract_delay_regress_alpha_{guess_a}_{guess_delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
+            x_opt, loss, a_est, delta_est = load(op.join(DATA_DIR, f"ftract_delay_regress_alpha_{guess_a}_{guess_delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
+        else:
             np.random.seed(99)
             x_init = solver.torch.tensor(np.random.rand(len(y_ground)))
 
-            x = deepcopy(x_init)
-            x_opt, loss = solver.gradient_descent_solver(x, y_ground, design_model,
-                                                        n_iter=self.n_iter, verbose=False, 
-                                                        early_stop=self.early_stop, step_size=self.step_size, delta=delta,
-                                                        l2_penalty=self.l2_penalty)
-            save(op.join(DATA_DIR, f"ftract_delay_regress_alpha_{a}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), (design_model, x_opt, loss))
-
+            x = solver.torch.tensor(x_init).float().requires_grad_(True)
+            x_opt, (a_est, delta_est), loss = solver.effective_delay_solver(x, y_ground, solver.torch.tensor(design_matrices).float(),
+                                                               alpha=solver.torch.tensor(guess_a), delta=solver.torch.tensor(guess_delta),
+                                                               n_iter=self.n_iter, verbose=self.verbose,early_stop=self.early_stop, step_size=self.step_size,l2_penalty=self.l2_penalty)
+            
+            save(op.join(DATA_DIR, f"ftract_delay_regress_alpha_{guess_a}_{guess_delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), (x_opt, loss, a_est, delta_est))
         x_pred_mat = add_diagonal_entries(x_opt.reshape(adj.shape[0], adj.shape[1]-1))
         # plot the mapping curve and see what it looks like
         x1 = x_opt
@@ -369,36 +377,52 @@ class Experiments:
         xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
         xy_mask2 = np.logical_and(x2_mask, y_mask).numpy().astype(bool)
 
-        y_est = solver.forward(design_model.float(), solver.torch.tensor(x_opt).float() + delta * (solver.torch.tensor(x_opt).float() > 0))
+        y_est = solver.forward(design_model.float(), solver.torch.tensor(x_opt).float() + delta_est * (solver.torch.tensor(x_opt).float() > 0))
 
-        fig1, axes = plt.subplots(ncols=3, figsize=(13, 5))
-        fig1.suptitle(rf"Path design matrix, $\alpha={a}$ $\delta={delta}$", fontsize=14)
-
-        axes[0].imshow(y_ground_mat, cmap='gray')
-        axes[0].set_title(f"Conduction delays", fontsize=12)
-        axes[0].set_xlabel("Region", fontsize=12)
-        axes[0].set_ylabel("Region", fontsize=12)
-        add_cbar(fig1, axes[0])
-        # utils.annotate_heatmap(fig, axes, np.round(x_pred_mat,4), adapt_color=0.6)
-
-        prop_loss = loss / np.sum(y_ground_mat != 0)
-        axes[1].imshow(x_pred_mat, cmap='gray')
-        axes[1].set_title(f"Effective delays (loss={np.round(prop_loss,4)} ms/edge)", fontsize=12)
-        add_cbar(fig1, axes[1])
-
-        axes[2].scatter(y_ground.numpy(), y_est.numpy(), s=20, alpha=.5, edgecolors="black", color='blue')
-        axes[2].plot(np.linspace(y_ground.numpy().min(), y_ground.numpy().max()), np.linspace(y_ground.numpy().min(), y_ground.numpy().max()), linestyle='--', color='gray', linewidth=2, label="1:1")
-        axes[2].set_xlabel("Conductance Estimated", fontsize=12)
-        axes[2].set_ylabel("Conductance Predicted", fontsize=12)
+        fig1, ax = plt.subplots(1, 3, figsize=(10, 4))
+        ax[0].imshow(y_ground_mat, cmap='gray')
+        ax[0].set_title(f"Input Cond.", fontsize=12)
+        ax[1].imshow(y_ground_mat_compare, cmap='gray')
+        ax[1].set_title(f"Cond. (peak-delay=100)", fontsize=12)
+        ax[2].imshow(x_pred_mat, cmap='gray')
+        ax[2].set_title(f"Est. Eff.", fontsize=12)
+        add_cbar(fig1, ax[0])
+        add_cbar(fig1, ax[1])
+        add_cbar(fig1, ax[2])
 
         fig1.tight_layout()
         if not self.verbose:
             plt.close()
         plt.show()
 
-        fig2, ax = plt.subplots(1,1, figsize=(10,6))
+        fig2, axes = plt.subplots(ncols=3, figsize=(13, 5))
+        fig2.suptitle(rf"$\alpha={a_est:2f}$ $\delta={delta_est:2f}$", fontsize=14)
 
-        ax.scatter(y[xy_mask1], x1[xy_mask1], s=20, alpha=.25, edgecolors="black", color='red', label=r'$\alpha=0.8$')
+        axes[0].imshow(y_ground_mat, cmap='gray')
+        axes[0].set_title(f"Cond. delays", fontsize=12)
+        axes[0].set_xlabel("Region", fontsize=12)
+        axes[0].set_ylabel("Region", fontsize=12)
+        add_cbar(fig2, axes[0])
+        # utils.annotate_heatmap(fig, axes, np.round(x_pred_mat,4), adapt_color=0.6)
+
+        prop_loss = loss / np.sum(y_ground_mat != 0)
+        axes[1].imshow(x_pred_mat, cmap='gray')
+        axes[1].set_title(f"Eff. delays)", fontsize=12)
+        add_cbar(fig2, axes[1])
+
+        axes[2].scatter(y_ground.numpy(), y_est.numpy(), s=20, alpha=.5, edgecolors="black", color='blue')
+        axes[2].plot(np.linspace(y_ground.numpy().min(), y_ground.numpy().max()), np.linspace(y_ground.numpy().min(), y_ground.numpy().max()), linestyle='--', color='gray', linewidth=2, label="1:1")
+        axes[2].set_xlabel("Conduction Estimated", fontsize=12)
+        axes[2].set_ylabel("Conduction Predicted", fontsize=12)
+
+        fig2.tight_layout()
+        if not self.verbose:
+            plt.close()
+        plt.show()
+
+        fig3, ax = plt.subplots(1,1, figsize=(10,6))
+
+        ax.scatter(y[xy_mask1], x1[xy_mask1], s=20, alpha=.25, edgecolors="black", color='red', label=r'$\alpha=$' + f"{a_est:.2f}")
         ax.scatter(y[xy_mask2], x2[xy_mask2], s=20, alpha=.25, edgecolors="black", color='blue', label=r'peak-delay $100$')
         # ax.scatter(y[~y_mask], x[~y_mask], s=100, alpha=.4, color="tab:brown", edgecolors="none")
         # ax.scatter(y[~x_mask], x[~x_mask], s=100, alpha=.4, color="tab:purple", edgecolors="none")
@@ -408,12 +432,12 @@ class Experiments:
         ax.set_ylabel("Effective delays", fontsize=16)
         ax.tick_params(labelsize=14)
         ax.legend(fontsize=16)
-        fig2.tight_layout()
+        fig3.tight_layout()
         if not self.verbose:
             plt.close()
         plt.show()
 
-        return fig1, fig2
+        return fig1, fig2, fig3
 
 
 if __name__ == "__main__":

@@ -331,16 +331,10 @@ class Experiments:
         means_c = [float(m[0]) if not np.isnan(m[0]) else 0.0 for m in deviations_c]
         stds_c  = [float(m[1]) if not np.isnan(m[1]) else 0.0 for m in deviations_c]
 
-        means = [float(m[0]) if not np.isnan(m[0]) else 0.0 for m in deviations]
-        stds  = [float(m[1]) if not np.isnan(m[1]) else 0.0 for m in deviations]
-
         # generate samples (ensure non-negative)
         samples_masked = [np.clip(np.random.normal(loc=mu, scale=sigma if sigma>0 else 0.0, size=n_samples),
                                 a_min=0, a_max=None)
                         for mu, sigma in zip(means_c, stds_c)]
-        samples_unmasked = [np.clip(np.random.normal(loc=mu, scale=sigma if sigma>0 else 0.0, size=n_samples),
-                                    a_min=0, a_max=None)
-                            for mu, sigma in zip(means, stds)]
 
         # prepare grouped boxplot positions
         n_groups = len(samples_masked)

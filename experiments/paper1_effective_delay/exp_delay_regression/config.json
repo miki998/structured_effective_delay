@@ -4,6 +4,7 @@
         "delay": "400",
         "feature": "feature_peak_delay_zth5",
         "bundle_prob_thresh": 0.95,
+        "ftract_prob_thresh": 0.5,
         "max_path_depth": 1,
         "optimization_parameters": {
             "n_iter": 1000,

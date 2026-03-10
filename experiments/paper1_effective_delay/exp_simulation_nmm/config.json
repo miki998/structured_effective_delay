@@ -2,6 +2,7 @@
     "delays": [[0, 0.2, 0.5],
             [100, 0, 10],
             [100, 10, 0]],
-    "density_roots": 8,
-    "range_roots": 10
+    "density_roots": 30,
+    "range_roots": 10,
+    "complex_only": true
 }

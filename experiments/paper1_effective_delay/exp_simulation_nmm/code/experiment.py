@@ -52,12 +52,16 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
 
     experiments = Experiments(config, verbose=verbose)
 
-    fig1 = None  # Placeholder for figures from experiment 1
+    fig1, fig2, fig3 = None, None, None  # Placeholder for figures from experiment 1
 
-    print("\nRunning Experiment 1: Simple graph simulation")
-    fig1 = experiments.run_experiment1()
+    print("\nRunning Experiment 1: Simple graph simulation 2 delays")
+    figs1 = experiments.run_experiment1()
 
-    fig2 = experiments.run_experiment2()
+    print("\nRunning Experiment 2: Modal approximation with all roots")
+    figs2 = experiments.run_experiment2()
+
+    # print("\nRunning Experiment 3: Modal approximation with subset roots")
+    # fig3 = experiments.run_experiment3()
 
     results = {
         "config": config,
@@ -67,9 +71,24 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     # Save results
     if save_results:
         os.makedirs(RESULTS_DIR, exist_ok=True)
-        if fig1 is not None:
-            fig1.savefig(
-                os.path.join(RESULTS_DIR, f"simulated_activity.png"),
+        labels = ["no_indirect", "indirect"]
+        if figs1 is not None:
+            for i, fig1 in enumerate(figs1):
+                fig1.savefig(
+                    os.path.join(RESULTS_DIR, f"simulated_activity_{labels[i]}.png"),
+                    dpi=300,
+                    bbox_inches="tight",
+                    )
+        if figs2 is not None:
+            for i, fig2 in enumerate(figs2):
+                fig2.savefig(
+                    os.path.join(RESULTS_DIR, f"modal_approximation_all_roots_{labels[i]}.png"),
+                    dpi=300,
+                    bbox_inches="tight",
+                    )
+        if fig3 is not None:
+            fig3.savefig(
+                os.path.join(RESULTS_DIR, f"modal_approximation_subset_roots.png"),
                 dpi=300,
                 bbox_inches="tight",
                 )
@@ -195,6 +214,7 @@ class Experiments:
         d: np.ndarray,
         roots_initial_guesses: List[complex],
         t_eval: np.ndarray,
+        complex_only: bool = False
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute a K-mode modal approximation for V(t) on t_eval using user-derived Laplace/residue formulas.
@@ -249,7 +269,7 @@ class Experiments:
                     is_duplicate = True
                     break
             if not is_duplicate:
-                if self.config["complex_only"] and np.abs(root.imag) < tolerance:
+                if complex_only and np.abs(root.imag) < tolerance:
                     continue
                 unique_roots.append(root)
 
@@ -277,7 +297,7 @@ class Experiments:
     def modal_approx_triangle_2_root(self,
         d: np.ndarray,
         roots_initial_guesses: List[complex],
-        t_eval: np.ndarray, simulated_timecourse: Optional[np.ndarray],
+        t_eval: np.ndarray, simulated_timecourse: Optional[np.ndarray], radius_roots: float = 5e-1, complex_only: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute a K-mode modal approximation for V(t) on t_eval using user-derived Laplace/residue formulas.
@@ -332,7 +352,7 @@ class Experiments:
                     is_duplicate = True
                     break
             if not is_duplicate:
-                if self.config["complex_only"] and np.abs(root.imag) < tolerance:
+                if complex_only and np.abs(root.imag) < tolerance:
                     continue
                 unique_roots.append(root)
 
@@ -345,8 +365,7 @@ class Experiments:
         for root in s_roots:
             if np.abs(root.imag) < tolerance:
                 continue  # skip real roots
-            nearby_roots = [s for s in s_roots if (np.abs(np.abs(s) - np.abs(root)) < 5e-1) and s != root and s != np.conjugate(root)]
-            print(nearby_roots)
+            nearby_roots = [s for s in s_roots if (np.abs(np.abs(s) - np.abs(root)) < radius_roots) and s != root and s != np.conjugate(root)]
             s_root_candidate = np.array([root, np.conjugate(root)] + nearby_roots, dtype=np.complex128)
 
             # Residue coefficients for each mode and component
@@ -366,109 +385,163 @@ class Experiments:
 
             error = np.linalg.norm(simulated_timecourse[:, 1] - V_modal.real[:, 1]) + np.linalg.norm(simulated_timecourse[:, 2] - V_modal.real[:, 2])
 
-            combinations.append((s_root_candidate, V_modal, error))
+            real_delay = t_eval[np.argmax(simulated_timecourse[:, 1])] - t_eval[np.argmax(simulated_timecourse[:, 2])]
+            modal_delay = t_eval[np.argmax(V_modal.real[:, 1])] - t_eval[np.argmax(V_modal.real[:, 2])]
+            error_peak = np.abs(real_delay - modal_delay)
 
-        return combinations
+            combinations.append((s_root_candidate, V_modal, error, error_peak))
+
+        combinations = sorted(combinations, key=lambda x: x[3])  # sort by error_peak
+        # print([f"MSE={comb[2]:.3f} | Peak Error={comb[3]:.3f}" for comb in combinations])
+
+        return combinations[0]
 
     def run_experiment1(self):
-        t, V = self.simulate_triangle_dde(self.d, t_end=10.0)
+        figs = []
+        for i, D in enumerate(self.d):
+            t, V = self.simulate_triangle_dde(D, t_end=10.0)
 
-        vmin, vmax = -self.config["range_roots"], self.config["range_roots"]
-        density_guesses = (vmax - vmin) / self.config["density_roots"]
-        
-        real_root_guesses = list(np.arange(vmin, vmax, density_guesses))
-        complex_root_guesses = [r1 + 1.0j * r2 for r1 in real_root_guesses for r2 in real_root_guesses]
-        guesses = real_root_guesses + complex_root_guesses  # Initial guesses for roots (real and complex)
+            fig, ax = plt.subplots(1, figsize=(4.5, 3))
+            ax.plot(t, V[:, 0], label=r'$V_0$', color='black')
+            ax.plot(t, V[:, 1], label=r'$V_1$', color='blue')
+            ax.plot(t, V[:, 2], label=r'$V_2$', color='red')
 
-        rescaled_t = t * 1  # Rescale time for root finding (optional, can help with convergence)
-        s_roots, V_modal = self.modal_approx_triangle(self.d, guesses, t_eval=rescaled_t)
-        print("Roots:", s_roots)
-        print("Number of distinct roots:", s_roots.shape[0])
+            # Vertical dotted lines from the peak ("tip") of V1 and V2 down to the x-axis (y=0)
+            i1 = np.argmax(V[:, 1])
+            i2 = np.argmax(V[:, 2])
 
-        fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-        ax[0].plot(t, V[:, 0], label=r'$V_0$')
-        ax[0].plot(t, V[:, 1], label=r'$V_1$')
-        ax[0].plot(t, V[:, 2], label=r'$V_2$')
-        ax[0].set_xlabel("Time (s)", fontsize=self.ticks_labels_fontsize)
-        ax[0].set_ylabel("Activity", fontsize=self.ticks_labels_fontsize)
-        ax[0].set_title(f"DDE Simulation", fontsize=self.title_fontsize)
-        ax[0].legend(prop={'size': self.ticks_labels_fontsize})
-        ax[0].grid(
-            True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
-        )
+            x1, y1 = t[i1], V[i1, 1]
+            x2, y2 = t[i2], V[i2, 2]
 
-        # Enforce history function on all modes
-        V_modal[:, 1] -= V_modal[:, 1].min()
-        V_modal[:, 2] -= V_modal[:, 2].min()
+            ax.vlines(x1, 0, y1, colors='blue', linestyles=':', linewidth=1.5, alpha=0.9)
+            ax.vlines(x2, 0, y2, colors='red', linestyles=':', linewidth=1.5, alpha=0.9)
 
-        ax[1].plot(t, V_modal.real[:, 0], label=r'$V_0$')
-        ax[1].plot(t, V_modal.real[:, 1], label=r'$V_1$')
-        ax[1].plot(t, V_modal.real[:, 2], label=r'$V_2$')
-        ax[1].set_xlabel("Time (s)", fontsize=self.ticks_labels_fontsize)
-        # ax[1].set_ylabel("Activity", fontsize=self.ticks_labels_fontsize)
-        ax[1].set_title(f"DDE Modal Approximation ({s_roots.shape[0]} roots)", fontsize=self.title_fontsize)
-        ax[1].legend(prop={'size': self.ticks_labels_fontsize})
-        ax[1].grid(
-            True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
-        )
+            # Optional: mark the tips
+            ax.scatter([x1], [y1], color='blue', s=20, zorder=3)
+            ax.scatter([x2], [y2], color='red', s=20, zorder=3)
 
-        ax[1].set_ylim(-0.05, 1.05)
+            ax.set_xlabel("Time (s)", fontsize=self.ticks_labels_fontsize)
+            if i == 0:
+                ax.set_ylabel("Activity", fontsize=self.ticks_labels_fontsize)
+                # ax.set_title(f"DDE Simulation", fontsize=self.title_fontsize)
+                ax.legend(prop={'size': self.ticks_labels_fontsize})
+            ax.grid(
+                True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
+            )
 
-        ax[0].tick_params(labelsize=self.ticks_labels_fontsize)
-        ax[1].tick_params(labelsize=self.ticks_labels_fontsize)
-        if not self.verbose:
-            plt.close()
-        plt.show()
+            figs.append(fig)
+            if not self.verbose:
+                plt.close()
+            plt.show()
 
-        return fig
-    
+        return figs
+
     def run_experiment2(self):
-        from matplotlib.widgets import Slider
+        figs = []
+        for D in self.d:
+            t, V = self.simulate_triangle_dde(D, t_end=10.0)
 
-        # Find the best 2 roots that approximate the DDE solution and plot the modal approximation using only those 2 roots.
-        
-        t, V = self.simulate_triangle_dde(self.d, t_end=10.0)
-
-        vmin, vmax = -self.config["range_roots"], self.config["range_roots"]
-        density_guesses = (vmax - vmin) / self.config["density_roots"]
-        
-        real_root_guesses = list(np.arange(vmin, vmax, density_guesses))
-        complex_root_guesses = [r1 + 1.0j * r2 for r1 in real_root_guesses for r2 in real_root_guesses]
-        guesses = real_root_guesses + complex_root_guesses  # Initial guesses for roots (real and complex)
-
-        rescaled_t = t * 1  # Rescale time for root finding (optional, can help with convergence)
-        combinations = self.modal_approx_triangle_2_root(self.d, guesses, t_eval=rescaled_t, simulated_timecourse=V)
-        
-        # Interactive plotting with slider
-        fig_interactive, ax_plot = plt.subplots(1, figsize=(10, 8))
-        plt.subplots_adjust(bottom=0.25)
-
-        ax_slider = plt.axes([0.25, 0.1, 0.5, 0.03])
-        slider = Slider(ax_slider, 'Combination', 0, len(combinations) - 1, valinit=0, valstep=1)
-        
-        def update(val):
-            idx = int(slider.val)
-            roots, modal, err = combinations[idx]
-            modal_plot = modal.copy()
-            modal_plot[:, 1] -= modal_plot[:, 1].min()
-            modal_plot[:, 2] -= modal_plot[:, 2].min()
+            vmin, vmax = -self.config["range_roots"], self.config["range_roots"]
+            density_guesses = (vmax - vmin) / self.config["density_roots"]
             
-            ax_plot.clear()
-            ax_plot.plot(t, V[:, 1], label=r'$V_1$ (DDE)', linewidth=2)
-            ax_plot.plot(t, V[:, 2], label=r'$V_2$ (DDE)', linewidth=2)
-            ax_plot.plot(t, modal_plot.real[:, 1], label=r'$V_1$ (Modal)', linestyle='--', linewidth=1.5)
-            ax_plot.plot(t, modal_plot.real[:, 2], label=r'$V_2$ (Modal)', linestyle='--', linewidth=1.5)
-            ax_plot.set_title(f"Combination {idx}/{len(combinations)-1}: error={err:.4f}", fontsize=self.title_fontsize)
-            ax_plot.legend(fontsize=self.ticks_labels_fontsize)
-            ax_plot.grid(True, alpha=0.3)
-            ax_plot.tick_params(labelsize=self.ticks_labels_fontsize)
-            ax_plot.set_xlabel("Time (s)", fontsize=self.ticks_labels_fontsize)
-            ax_plot.set_ylabel("Activity", fontsize=self.ticks_labels_fontsize)
-            fig_interactive.canvas.draw_idle()
-        
-        slider.on_changed(update)
-        update(0)
-        
+            real_root_guesses = list(np.arange(vmin, vmax, density_guesses))
+            complex_root_guesses = [r1 + 1.0j * r2 for r1 in real_root_guesses for r2 in real_root_guesses]
+            guesses = real_root_guesses + complex_root_guesses  # Initial guesses for roots (real and complex)
+
+            rescaled_t = t * 1  # Rescale time for root finding (optional, can help with convergence)
+            s_roots, V_modal = self.modal_approx_triangle(D, guesses, t_eval=rescaled_t, complex_only=False)
+            print("Roots:", s_roots)
+            print("Number of distinct roots:", s_roots.shape[0])
+
+            # fig, ax = plt.subplots(1, 3, figsize=(14, 3))
+            fig, ax = plt.subplots(1, 2, figsize=(10, 3))
+            ax[0].plot(t, V[:, 0], label=r'$V_0$', color='black')
+            ax[0].plot(t, V[:, 1], label=r'$V_1$', color='blue')
+            ax[0].plot(t, V[:, 2], label=r'$V_2$', color='red')
+            ax[0].set_xlabel("Time (s)", fontsize=self.ticks_labels_fontsize)
+            ax[0].set_ylabel("Activity", fontsize=self.ticks_labels_fontsize)
+            ax[0].set_title(f"DDE Simulation", fontsize=self.title_fontsize)
+            ax[0].legend(prop={'size': self.ticks_labels_fontsize})
+            ax[0].grid(
+                True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
+            )
+            ax[0].tick_params(labelsize=self.ticks_labels_fontsize)
+
+            # Enforce history function on all modes
+            V_modal[:, 1] -= V_modal[:, 1].min()
+            V_modal[:, 2] -= V_modal[:, 2].min()
+
+            ax[1].plot(t, V_modal.real[:, 0], label=r'$V_0$', color='black')
+            ax[1].plot(t, V_modal.real[:, 1], label=r'$V_1$', color='blue')
+            ax[1].plot(t, V_modal.real[:, 2], label=r'$V_2$', color='red')
+            ax[1].set_xlabel("Time (s)", fontsize=self.ticks_labels_fontsize)
+            # ax[1].set_ylabel("Activity", fontsize=self.ticks_labels_fontsize)
+            ax[1].set_title(f"DDE Modal Approximation ({s_roots.shape[0]} roots)", fontsize=self.title_fontsize)
+            ax[1].legend(prop={'size': self.ticks_labels_fontsize})
+            ax[1].grid(
+                True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
+            )
+
+            ax[1].set_ylim(-0.05, 1.05)
+            ax[1].tick_params(labelsize=self.ticks_labels_fontsize)
+
+            # ax[2].scatter(s_roots.real, s_roots.imag, color='red', marker='x')
+            # ax[2].set_xlabel("Real Part", fontsize=self.ticks_labels_fontsize)
+            # ax[2].set_ylabel("Imaginary Part", fontsize=self.ticks_labels_fontsize)
+            # ax[2].set_title("Roots", fontsize=self.title_fontsize)
+            # ax[2].grid(
+            #     True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
+            # )
+
+            figs.append(fig)
+            if not self.verbose:
+                plt.close()
+            plt.show()
+
+        return figs
+
+    def run_experiment3(self): # TODO: This is a work in progress and may not be fully functional yet.
+        from tqdm import tqdm
+
+        nb_d = 5
+        radiuses = [0.01, 0.5, 2.0, 3.0, 5.0, 7.0]
+        various_d = 0.2 + np.linspace(0.5, 5, nb_d)
+        error_peaks = np.zeros((len(radiuses), nb_d))
+        for i, rad in enumerate(tqdm(radiuses, desc="Radius of root neighborhood")):
+            for j, delay in enumerate(various_d):
+                delay_matrix = self.d.copy()
+                delay_matrix[0, 2] = delay
+
+                # Find the best 2 roots that approximate the DDE solution and plot the modal approximation using only those 2 roots.
+                t, V = self.simulate_triangle_dde(delay_matrix, t_end=10.0)
+
+                vmin, vmax = -self.config["range_roots"], self.config["range_roots"]
+                density_guesses = (vmax - vmin) / self.config["density_roots"]
+                
+                real_root_guesses = list(np.arange(vmin, vmax, density_guesses))
+                complex_root_guesses = [r1 + 1.0j * r2 for r1 in real_root_guesses for r2 in real_root_guesses]
+                guesses = real_root_guesses + complex_root_guesses  # Initial guesses for roots (real and complex)
+
+                rescaled_t = t * 1  # Rescale time for root finding (optional, can help with convergence)
+                combination = self.modal_approx_triangle_2_root(delay_matrix, guesses, t_eval=rescaled_t, simulated_timecourse=V, radius_roots=rad, complex_only=True)
+
+                _, _, _, error_peak = combination
+                error_peaks[i, j] = error_peak
+
+        fig, ax_plot = plt.subplots(1, figsize=(10, 8))
+
+        ax_plot.plot(radiuses, error_peaks.mean(axis=1), marker='o', linestyle='-', label='Peak Error')
+        ax_plot.fill_between(radiuses, 
+                     error_peaks.mean(axis=1) - error_peaks.std(axis=1),
+                     error_peaks.mean(axis=1) + error_peaks.std(axis=1),
+                     alpha=0.3, label='±1 Std Dev')
+        ax_plot.set_xlabel("Radius of Root Neighborhood", fontsize=self.ticks_labels_fontsize)
+        ax_plot.set_ylabel("Peak Error", fontsize=self.ticks_labels_fontsize)
+        ax_plot.set_title("Error vs. Radius of Root Neighborhood", fontsize=self.title_fontsize)
+        ax_plot.legend(fontsize=self.ticks_labels_fontsize)
+        ax_plot.grid(True, alpha=0.3)
+        ax_plot.tick_params(labelsize=self.ticks_labels_fontsize)
+
         if not self.verbose:
             plt.close()
         plt.show()

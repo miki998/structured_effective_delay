@@ -57,8 +57,8 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     print("\nRunning Experiment 1: Simple graph simulation 2 delays")
     figs1 = experiments.run_experiment1()
 
-    print("\nRunning Experiment 2: Modal approximation with all roots")
-    figs2 = experiments.run_experiment2()
+    # print("\nRunning Experiment 2: Modal approximation with all roots")
+    # figs2 = experiments.run_experiment2()
 
     # print("\nRunning Experiment 3: Modal approximation with subset roots")
     # fig3 = experiments.run_experiment3()
@@ -428,6 +428,7 @@ class Experiments:
             ax.grid(
                 True, which='both', linestyle='--', linewidth=0.5, alpha=0.7
             )
+            # ax.set_axis_off()
 
             figs.append(fig)
             if not self.verbose:

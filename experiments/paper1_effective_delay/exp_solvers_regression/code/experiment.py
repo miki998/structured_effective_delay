@@ -157,7 +157,7 @@ class Experiments:
         adj = (adj > self.config['bundle_prob_thresh']).astype(int)
         x_ground = remove_diagonal_entries(adj).flatten()
 
-        true_a, true_delta = 0.5, 0
+        true_a, true_delta = 0.5, 5
         guess_a, guess_delta = 0.0, 1.0
 
         if op.exists(op.join(DATA_DIR, f"design_matrices_{self.config['scale']}.pkl")):

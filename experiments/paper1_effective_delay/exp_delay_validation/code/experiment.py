@@ -69,8 +69,8 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     print("\nRunning Experiment 2: Comparison vs DCM delays")
     fig2 = experiments.run_experiment2()
 
-    print("\nRunning Experiment 3: Comparison vs Effective delays")
-    fig3 = experiments.run_experiment3()
+    # print("\nRunning Experiment 3: Comparison vs Effective delays")
+    # fig3 = experiments.run_experiment3()
 
     print("\nRunning Experiment 4: Comparison vs best effective delay (joint)")
     fig4 = experiments.run_experiment4()
@@ -170,9 +170,8 @@ class Experiments:
             # ftract_delays[delay] = remove_diagonal_entries(ftract_delays[delay])
 
         speed4cond_delay = []
-        fig, ax = plt.subplots(2,2, figsize=(12, 8))
+        fig, ax = plt.subplots(1, 4, figsize=(16, 3))
         for k in range(4):
-            r, c = k//2, k%2
             mask = np.logical_and((ftract_delays[delays[k]] > 0), (self.length > 0))
 
             y = self.length[mask]
@@ -190,18 +189,22 @@ class Experiments:
             
             corr = stats.pearsonr(x, y)[0]
             
-            ax[r, c].scatter(x, y, color='gray', alpha=0.7, edgecolors='k', s=10)
-            ax[r, c].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
-                        linewidth=2, color='r', linestyle='--', 
-                        label=rf'$R^2={np.round(r_squared, 3)}$ | $\rho={np.round(corr,3)}$ | $v={np.round(model.coef_[0],3)}$')
+            ax[k].scatter(x, y, color='gray', alpha=0.7, edgecolors='k', s=10)
+            # ax[k].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
+            #             linewidth=2, color='r', linestyle='--', 
+            #             label=rf'$R^2={np.round(r_squared, 3)}$ | $\rho={np.round(corr,3)}$ | $v={np.round(model.coef_[0],3)}$')
             
-            ax[r, c].legend(fontsize=16)
-            ax[r, c].set_title(f'delay<{delays[k]} ms', fontsize=16)
-            if (r == 0) and (c == 0):
-                ax[r, c].set_xlabel('delay (ms)', fontsize=16)
-                ax[r, c].set_ylabel('fiber length (mm)', fontsize=16)
+            ax[k].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
+                        linewidth=2, color='r', linestyle='--', 
+                        label=rf'$\rho={np.round(corr,3)}$ | $v={np.round(model.coef_[0],3)}$')
+            
+            ax[k].legend(fontsize=12)
+            ax[k].set_title(f'Delay {delays[k]} ms (C)', fontsize=16)
+            ax[k].set_xlabel('delay (ms)', fontsize=16)
+            if (k == 0):
+                ax[k].set_ylabel('fiber length (mm)', fontsize=16)
 
-            ax[r, c].tick_params(labelsize=14)
+            ax[k].tick_params(labelsize=14)
     
         fig.tight_layout()
         if not self.verbose:
@@ -224,9 +227,8 @@ class Experiments:
             ftract_dcms[delay] = ftract_dcms[delay][:self.n, :self.n]
             ftract_dcms[delay] *= (prob_y_ground > self.ftract_thresh)
 
-        fig, ax = plt.subplots(2,2, figsize=(12, 8))
+        fig, ax = plt.subplots(1, 4, figsize=(16, 3))
         for k in range(4):
-            r, c = k//2, k%2
             mask = np.logical_and((ftract_dcms[delays[k]] > 0), (self.length > 0))
 
             y = self.length[mask]
@@ -239,17 +241,18 @@ class Experiments:
 
             speed4dcm = np.round(model.coef_[0], 3)
 
-            ax[r, c].scatter(x, y, color='gray', alpha=0.7, edgecolors='k', s=10)
-            ax[r, c].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
+            ax[k].scatter(x, y, color='gray', alpha=0.7, edgecolors='k', s=10)
+            ax[k].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
                             linewidth=2, color='r', linestyle='--', 
-                            label=rf'$R^2={np.round(r_squared, 3)}$ | $\rho={np.round(corr,3)}$ | $v={np.round(model.coef_[0],3)}$')
+                            label=rf'$\rho={np.round(corr,3)}$ | $v={speed4dcm}$')
 
-            ax[r, c].legend(fontsize=16)
-            ax[r, c].set_title(f'DCM (<{delays[k]} ms), v={speed4dcm}', fontsize=16)
-            ax[r, c].set_xlabel('delay (ms)', fontsize=16)
-            ax[r, c].set_ylabel('fiber length (mm)', fontsize=16)
+            ax[k].legend(fontsize=12)
+            ax[k].set_title(f'DCM {delays[k]} ms', fontsize=16)
+            ax[k].set_xlabel('delay (ms)', fontsize=16)
+            if (k == 0):
+                ax[k].set_ylabel('fiber length (mm)', fontsize=16)
 
-            ax[r, c].tick_params(labelsize=14)
+            ax[k].tick_params(labelsize=14)
 
         fig.tight_layout()
         if not self.verbose:
@@ -352,7 +355,7 @@ class Experiments:
         ax.scatter(x, y, color='k', alpha=0.7, edgecolors='k', s=10)
         ax.plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
                     linewidth=2, color='r', linestyle='--', 
-                    label=rf'$R^2={np.round(r_squared, 3)}$ | $\rho={np.round(corr,3)}$ | $v={speed}$')
+                    label=rf'$\rho={np.round(corr,3)}$ | $v={speed}$')
         
         ax.legend(fontsize=16)
 

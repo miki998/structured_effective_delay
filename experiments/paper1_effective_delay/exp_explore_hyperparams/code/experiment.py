@@ -165,10 +165,10 @@ class Experiments:
         y_ground = solver.torch.tensor(remove_diagonal_entries(y_ground_mat).flatten())
 
         alpha_range = np.linspace(0, 1, 6)
-        if os.path.exists(op.join(DATA_DIR, f"ftract_delay_regress_alpha_range_{alpha_range}_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
-            x_opts, losses = load(op.join(DATA_DIR, f"ftract_delay_regress_alpha_range_{alpha_range}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
+        delta = 0
+        if os.path.exists(op.join(DATA_DIR, f"ftract_delay_regress_alpha_range_{alpha_range}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
+            x_opts, losses = load(op.join(DATA_DIR, f"ftract_delay_regress_alpha_range_{alpha_range}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
         else:
-            delta = 0
             design_matrices = regmod.get_shortest_matrices(adj, self.config['max_path_depth'], progress=True)
 
             x_opts, losses = [], []
@@ -190,7 +190,7 @@ class Experiments:
             save(op.join(DATA_DIR, f"ftract_delay_regress_alpha_range_{alpha_range}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), (x_opts, losses))
 
         # plot the mapping curve and see what it looks like
-        fig, ax = plt.subplots(1,1, figsize=(10,6))
+        fig, ax = plt.subplots(1,1, figsize=(8,4))
 
         import matplotlib.cm as cm
         colors = cm.rainbow(np.linspace(0, 1, len(alpha_range)))
@@ -201,14 +201,39 @@ class Experiments:
             y_mask = y_ground != 0
             xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
 
-            ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.25, edgecolors="black", color=colors[aidx], label=r'$\alpha=$' + f'{alpha: .2f}')
+            ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.25, edgecolors="black", color=colors[aidx], label=r'$\alpha=$' + f'{alpha: .1f}')
+            x_vals = y_ground[xy_mask1].detach().cpu().numpy()
+            y_vals = x_opt[xy_mask1]
 
-        ax.plot(np.linspace(0,150), np.linspace(0,150), linestyle='--', color="gray", linewidth=2, label="1:1")
+            if x_vals.size > 2:
+                # Bin the x values and compute means
+                n_bins = 20
+                x_bins = np.linspace(x_vals.min(), x_vals.max(), n_bins)
+                bin_indices = np.digitize(x_vals, x_bins)
+                
+                bin_means_x = []
+                bin_means_y = []
+                for bin_idx in range(1, n_bins):
+                    mask = bin_indices == bin_idx
+                    if mask.sum() > 0:
+                        bin_means_x.append(x_vals[mask].mean())
+                        bin_means_y.append(y_vals[mask].mean())
+                
+                if bin_means_x:
+                    ax.plot(bin_means_x, bin_means_y, color=colors[aidx], linewidth=2, alpha=0.9, marker='o', markersize=6)
 
-        ax.set_xlabel("Conductance delays", fontsize=16)
-        ax.set_ylabel("Effective delays", fontsize=16)
+        ax.plot(np.linspace(0,x_opt.max()), np.linspace(0,x_opt.max()), linestyle='--', color="black", linewidth=2, label="1:1")
+
+        ax.set_xlabel("Delays (C)", fontsize=16)
+        ax.set_ylabel("Estimated Delays (E)", fontsize=16)
         ax.tick_params(labelsize=14)
-        ax.legend(fontsize=16)
+        ax.legend(fontsize=12)
+        ax.grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
+        
         fig.tight_layout()
         if not self.verbose:
             plt.close()
@@ -264,7 +289,7 @@ class Experiments:
             save(op.join(DATA_DIR, f"ftract_delay_regress_delta_range_{delta_range}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), (x_opts, losses))
 
         # plot the mapping curve and see what it looks like
-        fig, ax = plt.subplots(1,1, figsize=(10,6))
+        fig, ax = plt.subplots(1,1, figsize=(8,4))
 
         import matplotlib.cm as cm
         colors = cm.rainbow(np.linspace(0, 1, len(delta_range)))
@@ -275,13 +300,39 @@ class Experiments:
             xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
 
             ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.25, edgecolors="black", color=colors[didx], label=r'$\delta=$' + f'{delta}')
+            x_vals = y_ground[xy_mask1].detach().cpu().numpy()
+            y_vals = x_opt[xy_mask1]
 
-        ax.plot(np.linspace(0,150), np.linspace(0,150), linestyle='--', color="gray", linewidth=2, label="1:1")
+            if x_vals.size > 2:
+                # Bin the x values and compute means
+                n_bins = 20
+                x_bins = np.linspace(x_vals.min(), x_vals.max(), n_bins)
+                bin_indices = np.digitize(x_vals, x_bins)
+                
+                bin_means_x = []
+                bin_means_y = []
+                for bin_idx in range(1, n_bins):
+                    mask = bin_indices == bin_idx
+                    if mask.sum() > 0:
+                        bin_means_x.append(x_vals[mask].mean())
+                        bin_means_y.append(y_vals[mask].mean())
+                
+                if bin_means_x:
+                    ax.plot(bin_means_x, bin_means_y, color=colors[didx], linewidth=2, alpha=0.9, marker='o', markersize=6)
 
-        ax.set_xlabel("Conductance delays", fontsize=16)
-        ax.set_ylabel("Effective delays", fontsize=16)
+        ax.plot(np.linspace(0,x_opt.max()), np.linspace(0,x_opt.max()), linestyle='--', color="black", linewidth=2, label="1:1")
+
+        ax.set_xlabel("Delays (C)", fontsize=16)
+        ax.set_ylabel("Estimated Delays (E)", fontsize=16)
         ax.tick_params(labelsize=14)
-        ax.legend(fontsize=16)
+        ax.legend(fontsize=12)
+        ax.grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
+        ax.set_xlim(-20, y_ground.max() + 60)
+
         fig.tight_layout()
         if not self.verbose:
             plt.close()

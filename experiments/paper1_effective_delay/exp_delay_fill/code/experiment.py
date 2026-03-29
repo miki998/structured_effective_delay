@@ -66,7 +66,7 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     fig1, fig2, fig3 = None, None, None
     experiments = Experiments(config, verbose=verbose)
     print("\nRunning Experiment 1: Illustrate Delay Fill on synthetic delays")
-    fig1, fig2 = experiments.run_experiment1()
+    figs1 = experiments.run_experiment1()
 
     print("\nRunning Experiment 2: Results as a function of missing data percentage")
     fig3 = experiments.run_experiment2()
@@ -79,18 +79,13 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     # Save results
     if save_results:
         os.makedirs(RESULTS_DIR, exist_ok=True)
-        if fig1 is not None:
-            fig1.savefig(
-                os.path.join(RESULTS_DIR, "illustrative_fill_in.png"),
+        for i, fig in enumerate(figs1):
+            fig.savefig(
+                os.path.join(RESULTS_DIR, f"illustrative_fill_in_{i+1}.png"),
                 dpi=300,
                 bbox_inches="tight",
             )
-        if fig2 is not None:
-            fig2.savefig(
-                os.path.join(RESULTS_DIR, "illustrative_fill_in_2.png"),
-                dpi=300,
-                bbox_inches="tight",
-            )
+
         if fig3 is not None:
             fig3.savefig(
                 os.path.join(RESULTS_DIR, "increasing_missing_data.png"),
@@ -188,7 +183,7 @@ class Experiments:
         return distrib.mean(), distrib.std()
 
     def run_experiment1(self):
-        a, delta = 0.5, 0.1
+        a, delta = 0.5, 5.0
 
         # Build design matrix
         design_shortest = regmod.apply_alpha_to_design(self.design_matrices, n_subopt=self.max_path_depth, alpha=a)
@@ -224,47 +219,44 @@ class Experiments:
         y_masked_mat = add_diagonal_entries(y_incomplete.numpy().reshape(self.adj.shape[0], self.adj.shape[1]-1))
         y_est_opt_mat = add_diagonal_entries(y_est_opt.reshape(self.adj.shape[0], self.adj.shape[1]-1))
 
-        fig1, ax = plt.subplots(1, 3, figsize=(13, 4))
 
-        ax[0].imshow(y_ground_mat, cmap='gray')
-        add_cbar(fig1, ax[0], ticksize=self.ticks_labels_fontsize)
-        ax[0].set_title("Complete Conduction", fontsize=self.title_fontsize)
-        
-        ax[1].imshow(y_masked_mat, cmap='gray')
-        add_cbar(fig1, ax[1], ticksize=self.ticks_labels_fontsize)
-        ax[1].set_title(f"Masked \n({int(self.missing_perc*100)}% amiss)", fontsize=self.title_fontsize)
+        mat_displays = [y_ground_mat, y_masked_mat, y_est_opt_mat]
+        titles = ["Complete Conduction", f"Masked \n({int(self.missing_perc*100)}% amiss)", f"Forward Conduction \n(After Fill-In)"]
+        color_maps = ['gray', 'gray', 'gray']
+        figs = []
 
-        ax[2].imshow(y_est_opt_mat, cmap='gray')
-        add_cbar(fig1, ax[2], ticksize=self.ticks_labels_fontsize)
-        ax[2].set_title(f"Forward Conduction \n(After Fill-In)", fontsize=self.title_fontsize)
+        for mat, title, cmap in zip(mat_displays, titles, color_maps):
+            fig, ax = plt.subplots(1, figsize=(3, 3))
 
-        for axe in ax:
-            axe.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
+            ax.imshow(mat, cmap=cmap)
+            add_cbar(fig, ax, ticksize=self.ticks_labels_fontsize)
+            # ax.set_title(title, fontsize=self.title_fontsize)
 
-        fig1.tight_layout()
-        if not self.verbose:
-            plt.close()
-        plt.show()
+            ax.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
+            figs.append(fig)
+            if not self.verbose:
+                plt.close()
+            plt.show()
     
-        fig2, ax = plt.subplots(1, figsize=(6, 3))
+        # fig2, ax = plt.subplots(1, figsize=(6, 3))
 
-        ax.scatter(y_ground.numpy(), y_est_opt, color='blue', alpha=0.6, edgecolor='k')
-        ax.plot([y_ground.min(), y_ground.max()], [y_ground.min(), y_ground.max()], 'r--', label='Ideal Fit')
-        ax.set_xlabel('Forward Conduction', fontsize=self.title_fontsize)
-        ax.set_ylabel('Grd. Conduction', fontsize=self.title_fontsize)
+        # ax.scatter(y_ground.numpy(), y_est_opt, color='blue', alpha=0.6, edgecolor='k')
+        # ax.plot([y_ground.min(), y_ground.max()], [y_ground.min(), y_ground.max()], 'r--', label='Ideal Fit')
+        # ax.set_xlabel('Forward Conduction', fontsize=self.title_fontsize)
+        # ax.set_ylabel('Grd. Conduction', fontsize=self.title_fontsize)
 
-        ax.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
-        ax.grid(alpha=0.7, linestyle='--', color='gray', linewidth=0.5)
+        # ax.tick_params(axis="both", labelsize=self.ticks_labels_fontsize)
+        # ax.grid(alpha=0.7, linestyle='--', color='gray', linewidth=0.5)
 
-        fig2.tight_layout()
-        if not self.verbose:
-            plt.close()
-        plt.show()
+        # fig2.tight_layout()
+        # if not self.verbose:
+        #     plt.close()
+        # plt.show()
 
-        return fig1, fig2
+        return figs
 
     def run_experiment2(self):
-        a, delta = 0.5, 0.1
+        a, delta = 0.5, 5
         
         # Build design matrix
         design_shortest = regmod.apply_alpha_to_design(self.design_matrices, n_subopt=self.max_path_depth, alpha=a)
@@ -280,9 +272,10 @@ class Experiments:
         y_ground = solver.forward(design_model.float(), solver.torch.tensor(x_ground).float() + delta * (solver.torch.tensor(x_ground).float() > 0))
 
         if os.path.exists(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl")):
-            x_opts = load(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl"))
+            x_opts, indices_mask = load(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl"))
         else:
             x_opts = []
+            indices_mask = []
             for p in tqdm(percentages, total=len(percentages)):
                 np.random.seed(99)
                 # Randomly remove p% of the observations
@@ -300,32 +293,29 @@ class Experiments:
                                                         early_stop=self.early_stop, step_size=self.step_size,
                                                         l2_penalty=self.l2_penalty)
                 x_opts.append(x_opt)
-            save(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl"), x_opts)
+                indices_mask.append(remove_indices)
+
+            save(op.join(DATA_DIR, f"synthetic_delay_fill_results_{a}_{delta}.pkl"), (x_opts, indices_mask))
 
 
         y_est_opts = [solver.forward(design_model.float(), solver.torch.tensor(x_opt).float() + delta * (solver.torch.tensor(x_opt).float() > 0)).numpy() for x_opt in x_opts]
 
         diff_opts = [y_est_opt - y_ground.numpy() for y_est_opt in y_est_opts]
-        rel_error_opts = [np.abs(diff) / np.abs(y_ground.numpy()) for diff in diff_opts]
+        rel_error_opts = [np.abs(diff[indices_mask[i]]) / np.abs(y_ground.numpy()[indices_mask[i]]) for i, diff in enumerate(diff_opts)]
 
         fig, ax = plt.subplots(1, figsize=(9, 4))
 
         ind = np.arange(len(percentages))
         width = 0.6
         ax.cla()
-        bp1 = ax.boxplot([rel_error_opts[i] for i in range(1, len(rel_error_opts))],
-                        positions=ind[1:], widths=width, patch_artist=True, boxprops=dict(facecolor='blue'))
-        
-        bp2 = ax.boxplot([rel_error_opts[0]],
-                 positions=[ind[0]],
-                 widths=width,
-                 patch_artist=True,
-                 boxprops=dict(facecolor='red'))
+        ax.boxplot(rel_error_opts[1:],
+                positions=ind[1:], widths=width, patch_artist=True, boxprops=dict(facecolor='white', edgecolor='black'), whis=[5, 95], showfliers=False)
+        medians = [np.median(rel_error_opts[i]) for i in range(len(rel_error_opts))]
+        ax.plot(ind, medians, 'r-', linewidth=1, marker='o', markersize=6)
 
         # enlarge fonts and tick sizes for the figure and boxplots
         fontsize = 18
         tick_labelsize = 18
-        text_fontsize = 12
 
         # Apply to all axes in the current figure
         for a in fig.axes:
@@ -337,16 +327,6 @@ class Experiments:
             # ticks
             a.tick_params(axis='both', which='major', labelsize=tick_labelsize, width=1.2, length=6)
             a.tick_params(axis='both', which='minor', labelsize=tick_labelsize-2, width=1.0, length=4)
-            # any manual text annotations
-            for t in a.texts:
-                t.set_fontsize(text_fontsize)
-            # legend (if present)
-            leg = a.get_legend()
-            if leg is not None:
-                for txt in leg.get_texts():
-                    txt.set_fontsize(text_fontsize)
-                if leg.get_title():
-                    leg.get_title().set_fontsize(text_fontsize)
 
         # Ensure xtick labels use the desired fontsize
         ax.set_xticks(ind)
@@ -357,10 +337,9 @@ class Experiments:
                 color='gray',
                 linewidth=0.5)
         
-        ax.set_xlabel('% missing')
-        ax.set_ylabel('Cond. Relative Error')
-
-        ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ['missing', 'complete'], loc='upper left', prop={'size': 18})
+        ax.set_xlabel('missing (% of observations)', fontsize=fontsize)
+        ax.set_ylabel('Relative Error (C)', fontsize=fontsize)
+        # ax.set_yscale('log')
 
         # increase overall figure title / layout if any
         fig.tight_layout(rect=[0, 0, 1, 0.98])

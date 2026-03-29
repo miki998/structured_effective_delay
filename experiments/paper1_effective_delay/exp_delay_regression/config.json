@@ -7,9 +7,9 @@
         "ftract_prob_thresh": 0.5,
         "max_path_depth": 1,
         "optimization_parameters": {
-            "n_iter": 1000,
-            "step_size": 0.05,
+            "n_iter": 1200,
+            "step_size": 0.025,
             "early_stop": 1e-10,
-            "l2_penalty": 0.1
+            "l2_penalty": 0.5
         }
 }

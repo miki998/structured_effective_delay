@@ -13,6 +13,7 @@ import numpy as np
 from copy import deepcopy
 import os.path as op
 import h5py
+from sympy import Line2D
 
 from src import regmod
 from src import solver
@@ -189,8 +190,9 @@ class Experiments:
 
             save(op.join(DATA_DIR, f"ftract_delay_regress_alpha_range_{alpha_range}_{delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), (x_opts, losses))
 
+        alpha_range = alpha_range[np.array([0, 2, 4, 5])]
         # plot the mapping curve and see what it looks like
-        fig, ax = plt.subplots(1,1, figsize=(8,4))
+        fig, ax = plt.subplots(1,1, figsize=(7, 4))
 
         import matplotlib.cm as cm
         colors = cm.rainbow(np.linspace(0, 1, len(alpha_range)))
@@ -201,7 +203,7 @@ class Experiments:
             y_mask = y_ground != 0
             xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
 
-            ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.25, edgecolors="black", color=colors[aidx], label=r'$\alpha=$' + f'{alpha: .1f}')
+            ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.1, edgecolors="black", color=colors[aidx])
             x_vals = y_ground[xy_mask1].detach().cpu().numpy()
             y_vals = x_opt[xy_mask1]
 
@@ -220,10 +222,11 @@ class Experiments:
                         bin_means_y.append(y_vals[mask].mean())
                 
                 if bin_means_x:
-                    ax.plot(bin_means_x, bin_means_y, color=colors[aidx], linewidth=2, alpha=0.9, marker='o', markersize=6)
+                    ax.plot(bin_means_x, bin_means_y, color=colors[aidx], linewidth=2, alpha=0.9, marker='o', markersize=6, label=r'$\alpha=$' + f'{alpha: .1f}')
 
         ax.plot(np.linspace(0,x_opt.max()), np.linspace(0,x_opt.max()), linestyle='--', color="black", linewidth=2, label="1:1")
 
+        ax.set_xticks(np.arange(0, 500, 100))
         ax.set_xlabel("Delays (C)", fontsize=16)
         ax.set_ylabel("Estimated Delays (E)", fontsize=16)
         ax.tick_params(labelsize=14)
@@ -233,7 +236,46 @@ class Experiments:
                 alpha=0.7,
                 color='gray',
                 linewidth=0.5)
+        ax.set_xlim(-20, y_ground.max() + 40)
+
+        # Pre-set Inset
+        inset_ax = ax.inset_axes(
+            [0.3, 0.15, 0.3, 0.3],  # [x, y, width, height] w.r.t. axes
+            xlim=[40, 120], ylim=[40, 48], # sets viewport & tells relation to main axes
+            xticklabels=[], yticklabels=[]
+        )
         
+        # Plot the same data on the inset
+        for aidx, (alpha, x_opt) in enumerate(zip(alpha_range, x_opts)):
+            x1_mask = x_opt > 1
+            y_mask = y_ground != 0
+            xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
+            
+            inset_ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.1, edgecolors="black", color=colors[aidx])
+            x_vals = y_ground[xy_mask1].detach().cpu().numpy()
+            y_vals = x_opt[xy_mask1]
+            
+            if x_vals.size > 2:
+                n_bins = 20
+                x_bins = np.linspace(x_vals.min(), x_vals.max(), n_bins)
+                bin_indices = np.digitize(x_vals, x_bins)
+            
+            bin_means_x = []
+            bin_means_y = []
+            for bin_idx in range(1, n_bins):
+                mask = bin_indices == bin_idx
+                if mask.sum() > 0:
+                    bin_means_x.append(x_vals[mask].mean())
+                    bin_means_y.append(y_vals[mask].mean())
+            
+            if bin_means_x:
+                inset_ax.plot(bin_means_x, bin_means_y, color=colors[aidx], linewidth=2, alpha=0.9, marker='o', markersize=6)
+        
+        inset_ax.plot(np.linspace(0, x_opt.max()), np.linspace(0, x_opt.max()), linestyle='--', color="black", linewidth=2)
+
+        # add zoom leaders
+        ax.indicate_inset_zoom(inset_ax, edgecolor="black")
+
         fig.tight_layout()
         if not self.verbose:
             plt.close()
@@ -289,8 +331,9 @@ class Experiments:
             save(op.join(DATA_DIR, f"ftract_delay_regress_delta_range_{delta_range}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"), (x_opts, losses))
 
         # plot the mapping curve and see what it looks like
-        fig, ax = plt.subplots(1,1, figsize=(8,4))
+        fig, ax = plt.subplots(1,1, figsize=(7, 4))
 
+        delta_range = delta_range[np.array([0, 3, 6, 9])]
         import matplotlib.cm as cm
         colors = cm.rainbow(np.linspace(0, 1, len(delta_range)))
 
@@ -299,7 +342,7 @@ class Experiments:
             y_mask = y_ground != 0
             xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
 
-            ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.25, edgecolors="black", color=colors[didx], label=r'$\delta=$' + f'{delta}')
+            ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.25, edgecolors="black", color=colors[didx])
             x_vals = y_ground[xy_mask1].detach().cpu().numpy()
             y_vals = x_opt[xy_mask1]
 
@@ -318,20 +361,59 @@ class Experiments:
                         bin_means_y.append(y_vals[mask].mean())
                 
                 if bin_means_x:
-                    ax.plot(bin_means_x, bin_means_y, color=colors[didx], linewidth=2, alpha=0.9, marker='o', markersize=6)
+                    ax.plot(bin_means_x, bin_means_y, color=colors[didx], linewidth=2, alpha=0.9, marker='o', markersize=6, label=r'$\delta=$' + f'{delta}')
 
         ax.plot(np.linspace(0,x_opt.max()), np.linspace(0,x_opt.max()), linestyle='--', color="black", linewidth=2, label="1:1")
 
         ax.set_xlabel("Delays (C)", fontsize=16)
         ax.set_ylabel("Estimated Delays (E)", fontsize=16)
         ax.tick_params(labelsize=14)
+
         ax.legend(fontsize=12)
         ax.grid(axis='both', 
                 linestyle='--', 
                 alpha=0.7,
                 color='gray',
                 linewidth=0.5)
-        ax.set_xlim(-20, y_ground.max() + 60)
+        ax.set_xlim(-20, y_ground.max() + 40)
+
+        # Pre-set Inset
+        inset_ax = ax.inset_axes(
+            [0.32, 0.13, 0.3, 0.3],  # [x, y, width, height] w.r.t. axes
+            xlim=[120, 160], ylim=[39, 48], # sets viewport & tells relation to main axes
+            xticklabels=[], yticklabels=[]
+        )
+        
+        # Plot the same data on the inset
+        for aidx, (delta, x_opt) in enumerate(zip(delta_range, x_opts)):
+            x1_mask = x_opt > 1
+            y_mask = y_ground != 0
+            xy_mask1 = np.logical_and(x1_mask, y_mask).numpy().astype(bool)
+            
+            inset_ax.scatter(y_ground[xy_mask1], x_opt[xy_mask1], s=20, alpha=.1, edgecolors="black", color=colors[aidx])
+            x_vals = y_ground[xy_mask1].detach().cpu().numpy()
+            y_vals = x_opt[xy_mask1]
+            
+            if x_vals.size > 2:
+                n_bins = 20
+                x_bins = np.linspace(x_vals.min(), x_vals.max(), n_bins)
+                bin_indices = np.digitize(x_vals, x_bins)
+            
+            bin_means_x = []
+            bin_means_y = []
+            for bin_idx in range(1, n_bins):
+                mask = bin_indices == bin_idx
+                if mask.sum() > 0:
+                    bin_means_x.append(x_vals[mask].mean())
+                    bin_means_y.append(y_vals[mask].mean())
+            
+            if bin_means_x:
+                inset_ax.plot(bin_means_x, bin_means_y, color=colors[aidx], linewidth=2, alpha=0.9, marker='o', markersize=6)
+        
+        inset_ax.plot(np.linspace(0, x_opt.max()), np.linspace(0, x_opt.max()), linestyle='--', color="black", linewidth=2)
+
+        # add zoom leaders
+        ax.indicate_inset_zoom(inset_ax, edgecolor="black")
 
         fig.tight_layout()
         if not self.verbose:

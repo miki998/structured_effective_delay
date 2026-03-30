@@ -320,25 +320,25 @@ class Experiments:
         # Apply to all axes in the current figure
         for a in fig.axes:
             # axis labels and title
-            if a.title:
-                a.title.set_fontsize(fontsize + 2)
+            # if a.title:
+            #     a.title.set_fontsize(fontsize + 2)
             a.xaxis.label.set_fontsize(fontsize)
             a.yaxis.label.set_fontsize(fontsize)
             # ticks
             a.tick_params(axis='both', which='major', labelsize=tick_labelsize, width=1.2, length=6)
-            a.tick_params(axis='both', which='minor', labelsize=tick_labelsize-2, width=1.0, length=4)
+            # a.tick_params(axis='both', which='minor', labelsize=self.ticks_labels_fontsize-2, width=1.0, length=4)
 
         # Ensure xtick labels use the desired fontsize
         ax.set_xticks(ind)
-        ax.set_xticklabels([f"{int(p*100)}%" for p in percentages], fontsize=fontsize)
+        ax.set_xticklabels([f"{int(p*100)}%" for p in percentages], fontsize=tick_labelsize)
         ax.grid(axis='both', 
                 linestyle='--', 
                 alpha=0.7,
                 color='gray',
                 linewidth=0.5)
         
-        ax.set_xlabel('missing (% of observations)', fontsize=fontsize)
-        ax.set_ylabel('Relative Error (C)', fontsize=fontsize)
+        ax.set_xlabel('missing (% of observations)', fontsize=tick_labelsize)
+        ax.set_ylabel('Relative Error (C)', fontsize=tick_labelsize)
         # ax.set_yscale('log')
 
         # increase overall figure title / layout if any

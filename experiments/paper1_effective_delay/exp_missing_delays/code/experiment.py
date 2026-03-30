@@ -236,11 +236,12 @@ class Experiments:
         figs = []
 
         for mat, title, cmap in zip(mat_displays, titles, color_maps):
-            fig, ax = plt.subplots(1, figsize=(3.3, 3.3))
+            fig, ax = plt.subplots(1, figsize=(3, 3))
             if title == "Grd. Eff.":
                 ax.imshow(mat, cmap=cmap)
             else:
                 ax.imshow(mat, cmap=cmap, vmin=-vmax, vmax=vmax)
+            ax.tick_params(axis="both", labelsize=self.ticks_fontsize)
             # ax.set_title(title, fontsize=self.title_fontsize)
             add_cbar(fig, ax, ticksize=self.ticks_fontsize)
             figs.append(fig)

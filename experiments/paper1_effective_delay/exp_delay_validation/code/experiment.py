@@ -189,7 +189,7 @@ class Experiments:
             
             corr = stats.pearsonr(x, y)[0]
             
-            ax[k].scatter(x, y, color='gray', alpha=0.7, edgecolors='k', s=10)
+            ax[k].scatter(x, y, color='yellowgreen', alpha=0.7, edgecolors='k', s=10)
             # ax[k].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
             #             linewidth=2, color='r', linestyle='--', 
             #             label=rf'$R^2={np.round(r_squared, 3)}$ | $\rho={np.round(corr,3)}$ | $v={np.round(model.coef_[0],3)}$')
@@ -205,6 +205,11 @@ class Experiments:
                 ax[k].set_ylabel('fiber length (mm)', fontsize=16)
 
             ax[k].tick_params(labelsize=14)
+            ax[k].grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
     
         fig.tight_layout()
         if not self.verbose:
@@ -241,7 +246,7 @@ class Experiments:
 
             speed4dcm = np.round(model.coef_[0], 3)
 
-            ax[k].scatter(x, y, color='gray', alpha=0.7, edgecolors='k', s=10)
+            ax[k].scatter(x, y, color='royalblue', alpha=0.7, edgecolors='k', s=10)
             ax[k].plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
                             linewidth=2, color='r', linestyle='--', 
                             label=rf'$\rho={np.round(corr,3)}$ | $v={speed4dcm}$')
@@ -253,6 +258,11 @@ class Experiments:
                 ax[k].set_ylabel('fiber length (mm)', fontsize=16)
 
             ax[k].tick_params(labelsize=14)
+            ax[k].grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
 
         fig.tight_layout()
         if not self.verbose:
@@ -326,13 +336,14 @@ class Experiments:
         return fig
     
     def run_experiment4(self):
+        guess_a, guess_delta = 0.8, 10. # assumed hyperparameters
         # Loading effective delays
-        if os.path.exists(op.join(DATA_DIR, f"../../exp_solvers_regression/data/compare_ftract_delay_regress_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
-            compare_solvers = load(op.join(DATA_DIR, f"../../exp_solvers_regression/data/compare_ftract_delay_regress_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
+        if os.path.exists(op.join(DATA_DIR, f"../../exp_delay_regression/data/ftract_delay_regress_alpha_{guess_a}_{guess_delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl")):
+            _, x_opt, _, _, _, _, _ = load(op.join(DATA_DIR, f"../../exp_delay_regression/data/ftract_delay_regress_alpha_{guess_a}_{guess_delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl"))
         else:
-            raise FileNotFoundError(f"Required data file not found: {op.join(DATA_DIR, f'../../exp_solvers_regression/data/compare_ftract_delay_regress_{self.scale}_{self.age_range}_{self.delay_max}.pkl')}")
+            raise FileNotFoundError(f"Required data file not found: {op.join(DATA_DIR, f'../../exp_delay_regression/data/ftract_delay_regress_alpha_{guess_a}_{guess_delta}_{self.scale}_{self.age_range}_{self.delay_max}.pkl')}")
 
-        joint_delay = compare_solvers["joint"][0]
+        joint_delay = x_opt
         joint_delay = add_diagonal_entries(joint_delay.reshape(self.length.shape[0], self.length.shape[1]-1))
 
         min_delay = 1
@@ -345,17 +356,17 @@ class Experiments:
 
         model = LinearRegression()
         model.fit(x.reshape(-1,1), y)
-        r_squared = model.score(x.reshape(-1,1), y)
+        # r_squared = model.score(x.reshape(-1,1), y)
         
         speed4eff_delay.append(model.coef_[0])
 
         corr = stats.pearsonr(x, y)[0]
         
         speed = np.round((np.round(model.coef_[0], 3)  * 100 // 1) / 100, 2)
-        ax.scatter(x, y, color='k', alpha=0.7, edgecolors='k', s=10)
+        ax.scatter(x, y, color='darkorange', alpha=0.7, edgecolors='k', s=10)
         ax.plot([0, x.max()], [model.intercept_, model.intercept_ + x.max() * model.coef_[0]], 
                     linewidth=2, color='r', linestyle='--', 
-                    label=rf'$\rho={np.round(corr,3)}$ | $v={speed}$')
+                    label=rf'$\rho={np.round(corr,3)}$ | $v={np.round(speed,3) :.3f}$')
         
         ax.legend(fontsize=16)
 
@@ -363,6 +374,11 @@ class Experiments:
         ax.set_xlabel('delay (ms)', fontsize=16)
 
         ax.tick_params(labelsize=14)
+        ax.grid(axis='both', 
+                linestyle='--', 
+                alpha=0.7,
+                color='gray',
+                linewidth=0.5)
 
         fig.tight_layout()
         if not self.verbose:

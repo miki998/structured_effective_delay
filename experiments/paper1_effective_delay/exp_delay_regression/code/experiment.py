@@ -63,11 +63,11 @@ def run(save_results: bool = True, verbose: bool = True) -> dict:
     # print("\nRunning Experiment 1: Synthetic Toy Graph")
     # figs1 = experiments.run_experiment1()
 
-    print("\nRunning Experiment 2: Synthetic Bundle Probability Atlas")
-    figs2, _ = experiments.run_experiment2()
+    # print("\nRunning Experiment 2: Synthetic Bundle Probability Atlas")
+    # figs2, _ = experiments.run_experiment2()
 
-    print("\nRunning Experiment 3: Synthetic Bundle Probability Atlas (Unknown Hyperparameters)")
-    figs3, _ = experiments.run_experiment3()
+    # print("\nRunning Experiment 3: Synthetic Bundle Probability Atlas (Unknown Hyperparameters)")
+    # figs3, _ = experiments.run_experiment3()
 
     print("\nRunning Experiment 4: Bundle Probability Atlas + F-TRACT")
     figs4 = experiments.run_experiment4()
@@ -463,7 +463,7 @@ class Experiments:
         y_ground_mat_dcm *= (prob_y_ground_compare > prob_thresh)
         y_ground_dcm = solver.torch.tensor(remove_diagonal_entries(y_ground_mat_dcm).flatten())
 
-        guess_a, guess_delta = 0.1, 5. # assumed hyperparameters
+        guess_a, guess_delta = 0.8, 10. # assumed hyperparameters
 
         if os.path.exists(op.join(DATA_DIR, f"design_matrices_{self.scale}.pkl")):
             design_matrices = load(op.join(DATA_DIR, f"design_matrices_{self.scale}.pkl"))
